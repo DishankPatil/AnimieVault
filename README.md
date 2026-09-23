@@ -22,4 +22,3 @@ Animie Website built with React, TypeScript, and Vite.
    ```bash
    npm run build
    ```
-

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { fetchAnimeDetails } from '../services/anilist';
 import type { Anime } from '../services/anilist';
-import { Loader2, Star, Play, Calendar, Film, Heart } from 'lucide-react';
+import { Loader2, Star, Play, Calendar, Film, Heart, Layers } from 'lucide-react';
 import { isInWatchlist, toggleWatchlist } from '../utils/preferences';
 
 function sanitizeDescription(description: string): string {
@@ -18,6 +18,16 @@ function sanitizeDescription(description: string): string {
   });
   return parsed.body.innerHTML;
 }
+
+const RELATION_LABELS: Record<string, string> = {
+  PREQUEL: 'Prequel',
+  SEQUEL: 'Sequel',
+  PARENT: 'Main Series',
+  SIDE_STORY: 'Side Story',
+  SPIN_OFF: 'Spin-off',
+  ALTERNATIVE: 'Alt Version',
+  SUMMARY: 'Recap',
+};
 
 export const AnimeDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -96,6 +106,8 @@ export const AnimeDetails: React.FC = () => {
   const filteredEpisodes = epFilter.trim()
     ? allEpisodes.filter((ep) => ep.toString() === epFilter.trim() || ep.toString().includes(epFilter.trim()))
     : allEpisodes;
+
+  const relations = anime.relations || [];
 
   return (
     <div>
@@ -189,6 +201,66 @@ export const AnimeDetails: React.FC = () => {
             />
           </div>
         </div>
+
+        {/* Seasons & Franchise Media Section */}
+        {relations.length > 0 && (
+          <div className="mt-12 bg-slate-900/60 border border-slate-800 rounded-xl p-5 sm:p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Layers className="size-6 text-teal-400" />
+              <h2 className="text-xl font-bold text-slate-100">Seasons & Related Media</h2>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              {/* Current Active Season */}
+              <div className="bg-teal-500/10 border-2 border-teal-500 rounded-lg p-3 flex flex-col justify-between relative overflow-hidden">
+                <span className="absolute top-2 right-2 bg-teal-500 text-slate-950 font-bold text-[10px] uppercase px-2 py-0.5 rounded-full shadow">
+                  Selected
+                </span>
+                <div className="space-y-1">
+                  <div className="text-xs font-bold text-teal-400">Current Entry</div>
+                  <h3 className="text-xs font-bold text-white line-clamp-2">{title}</h3>
+                </div>
+                <div className="mt-3 text-[11px] text-slate-400 font-semibold">
+                  {anime.format || 'TV'} {anime.seasonYear ? `• ${anime.seasonYear}` : ''} {totalEpisodes ? `• ${totalEpisodes} Ep` : ''}
+                </div>
+              </div>
+
+              {/* Related Seasons / Franchise Entries */}
+              {relations.map((rel) => {
+                const relTitle = rel.title.english || rel.title.romaji;
+                const label = RELATION_LABELS[rel.relationType] || rel.relationType;
+
+                return (
+                  <Link
+                    key={rel.id}
+                    to={`/anime/${rel.id}`}
+                    className="bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 hover:border-teal-400 rounded-lg p-3 flex flex-col justify-between group transition shadow-md"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 group-hover:bg-teal-500/20 group-hover:text-teal-300">
+                          {label}
+                        </span>
+                        {rel.format && (
+                          <span className="text-[10px] font-bold text-slate-400 uppercase">
+                            {rel.format}
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="text-xs font-bold text-slate-200 group-hover:text-teal-300 transition line-clamp-2 mt-1">
+                        {relTitle}
+                      </h3>
+                    </div>
+                    <div className="mt-3 text-[11px] text-slate-400 font-medium flex items-center justify-between">
+                      <span>{rel.seasonYear || 'N/A'}</span>
+                      <span>{rel.episodes ? `${rel.episodes} Ep` : ''}</span>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Episodes Selector Grid */}
         <div className="mt-12">

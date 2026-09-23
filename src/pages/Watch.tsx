@@ -3,8 +3,18 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { fetchAnimeDetails } from '../services/anilist';
 import type { Anime } from '../services/anilist';
 import { PlayerContainer } from '../components/PlayerContainer';
-import { ChevronLeft, ChevronRight, ArrowLeft, Loader2, Maximize2, Minimize2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ArrowLeft, Loader2, Maximize2, Minimize2, Layers } from 'lucide-react';
 import { getPlayerPreferences, savePlayerPreferences, saveWatchHistory } from '../utils/preferences';
+
+const RELATION_LABELS: Record<string, string> = {
+  PREQUEL: 'Prequel',
+  SEQUEL: 'Sequel',
+  PARENT: 'Main Series',
+  SIDE_STORY: 'Side Story',
+  SPIN_OFF: 'Spin-off',
+  ALTERNATIVE: 'Alt Version',
+  SUMMARY: 'Recap',
+};
 
 export const Watch: React.FC = () => {
   const { id, episode } = useParams<{ id: string; episode: string }>();
@@ -73,6 +83,7 @@ export const Watch: React.FC = () => {
   }, [animeId, currentEpisode]);
 
   const totalEpisodes = anime?.episodes || 24;
+  const relations = anime?.relations || [];
 
   // Determine stream ID based on selected source provider
   const targetStreamId = source === 'mal' && anime?.idMal ? anime.idMal : animeId;
@@ -167,6 +178,43 @@ export const Watch: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Season & Installments Switcher */}
+      {relations.length > 0 && (
+        <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 sm:p-6 mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <Layers className="size-5 text-teal-400" />
+            <h3 className="text-base font-bold text-slate-200">Switch Season / Installment</h3>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {/* Active Season Badge */}
+            <div className="bg-teal-500 text-slate-950 font-bold px-3.5 py-2 rounded-lg text-xs border border-teal-400 flex items-center gap-2 shadow-md">
+              <span className="w-2 h-2 rounded-full bg-slate-950 animate-pulse" />
+              <span>Current: {title}</span>
+            </div>
+
+            {/* Related Seasons */}
+            {relations.map((rel) => {
+              const relTitle = rel.title.english || rel.title.romaji;
+              const label = RELATION_LABELS[rel.relationType] || rel.relationType;
+
+              return (
+                <button
+                  key={rel.id}
+                  onClick={() => navigate(`/watch/${rel.id}/1`)}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-teal-400 font-semibold px-3.5 py-2 rounded-lg text-xs transition flex items-center gap-2"
+                >
+                  <span className="text-[10px] uppercase font-bold text-teal-300 bg-teal-500/20 px-1.5 py-0.5 rounded">
+                    {label}
+                  </span>
+                  <span className="truncate max-w-[200px]">{relTitle}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Quick Episode Grid */}
       <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 sm:p-6">

@@ -1,3 +1,26 @@
+export interface AnimeRelation {
+  id: number;
+  idMal: number | null;
+  relationType: string;
+  title: {
+    romaji: string;
+    english: string | null;
+    native: string | null;
+  };
+  coverImage: {
+    extraLarge: string;
+    large: string;
+    medium: string;
+    color: string | null;
+  };
+  format: string | null;
+  season: string | null;
+  seasonYear: number | null;
+  episodes: number | null;
+  status: string | null;
+  averageScore: number | null;
+}
+
 export interface Anime {
   id: number;
   idMal: number | null;
@@ -18,10 +41,12 @@ export interface Anime {
   genres: string[];
   averageScore: number | null;
   status: string | null;
+  season?: string | null;
   seasonYear: number | null;
   format: string | null;
   ageRating?: string | null;
   startDate?: string | null;
+  relations?: AnimeRelation[];
 }
 
 export interface RecentEpisode {
@@ -68,6 +93,7 @@ const ANIME_FIELDS = `
   genres
   averageScore
   status
+  season
   seasonYear
   format
 `;
@@ -830,6 +856,36 @@ export async function searchAnime(search: string, page: number = 1, perPage: num
   return { media: sliced, hasNextPage: start + perPage < matched.length };
 }
 
+function parseRawRelations(media: any): AnimeRelation[] {
+  if (!media?.relations?.edges || !Array.isArray(media.relations.edges)) {
+    return [];
+  }
+  return media.relations.edges
+    .filter((edge: any) => edge && edge.node && edge.node.id)
+    .map((edge: any) => ({
+      id: edge.node.id,
+      idMal: edge.node.idMal || null,
+      relationType: edge.relationType || 'OTHER',
+      title: {
+        romaji: edge.node.title?.romaji || 'Unknown',
+        english: edge.node.title?.english || null,
+        native: edge.node.title?.native || null,
+      },
+      coverImage: {
+        extraLarge: edge.node.coverImage?.extraLarge || edge.node.coverImage?.large || '',
+        large: edge.node.coverImage?.large || '',
+        medium: edge.node.coverImage?.medium || '',
+        color: edge.node.coverImage?.color || null,
+      },
+      format: edge.node.format || null,
+      season: edge.node.season || null,
+      seasonYear: edge.node.seasonYear || null,
+      episodes: edge.node.episodes || null,
+      status: edge.node.status || null,
+      averageScore: edge.node.averageScore || null,
+    }));
+}
+
 export async function fetchAnimeDetails(id: number): Promise<Anime | null> {
   const cacheKey = `details_${id}`;
   const cached = getCachedData<Anime>(cacheKey);
@@ -839,6 +895,32 @@ export async function fetchAnimeDetails(id: number): Promise<Anime | null> {
     query ($id: Int) {
       Media (id: $id, type: ANIME) {
         ${ANIME_FIELDS}
+        relations {
+          edges {
+            relationType
+            node {
+              id
+              idMal
+              title {
+                romaji
+                english
+                native
+              }
+              coverImage {
+                extraLarge
+                large
+                medium
+                color
+              }
+              format
+              season
+              seasonYear
+              episodes
+              status
+              averageScore
+            }
+          }
+        }
       }
     }
   `;
@@ -857,8 +939,14 @@ export async function fetchAnimeDetails(id: number): Promise<Anime | null> {
     }, 3500);
     const json = await response.json();
     if (json.data?.Media) {
-      setCachedData(cacheKey, json.data.Media);
-      return json.data.Media;
+      const media = json.data.Media;
+      const parsedRelations = parseRawRelations(media);
+      const result: Anime = {
+        ...media,
+        relations: parsedRelations,
+      };
+      setCachedData(cacheKey, result);
+      return result;
     }
   } catch (e) {
     console.warn('fetchAnimeDetails AniList GraphQL failed', e);
@@ -866,8 +954,74 @@ export async function fetchAnimeDetails(id: number): Promise<Anime | null> {
 
   // Fallback single anime object from local list if offline
   const ep = FALLBACK_RECENT_EPISODES.find(e => e.animeId === id) || FALLBACK_RECENT_EPISODES[0];
+  const targetId = ep ? ep.animeId : id;
+
+  // Curated Fallback Relations for common shows
+  const fallbackRelations: AnimeRelation[] = [];
+  if (targetId === 176500) {
+    // Solo Leveling S2 -> S1
+    fallbackRelations.push({
+      id: 151807,
+      idMal: 51146,
+      relationType: 'PREQUEL',
+      title: { romaji: 'Ore dake Hairu Dungeon', english: 'Solo Leveling Season 1', native: null },
+      coverImage: { extraLarge: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx151807-m1E9N9J92A4.jpg', large: '', medium: '', color: null },
+      format: 'TV',
+      season: 'WINTER',
+      seasonYear: 2024,
+      episodes: 12,
+      status: 'FINISHED',
+      averageScore: 85
+    });
+  } else if (targetId === 145064) {
+    // Jujutsu Kaisen S2 -> S1 & Movie
+    fallbackRelations.push(
+      {
+        id: 113415,
+        idMal: 40748,
+        relationType: 'PREQUEL',
+        title: { romaji: 'Jujutsu Kaisen', english: 'Jujutsu Kaisen Season 1', native: null },
+        coverImage: { extraLarge: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx113415-bbBWj4p8hYGG.jpg', large: '', medium: '', color: null },
+        format: 'TV',
+        season: 'FALL',
+        seasonYear: 2020,
+        episodes: 24,
+        status: 'FINISHED',
+        averageScore: 86
+      },
+      {
+        id: 131573,
+        idMal: 48561,
+        relationType: 'SIDE_STORY',
+        title: { romaji: 'Jujutsu Kaisen 0', english: 'Jujutsu Kaisen 0 Movie', native: null },
+        coverImage: { extraLarge: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx131573-wEaE7Zz5n7wM.jpg', large: '', medium: '', color: null },
+        format: 'MOVIE',
+        season: 'WINTER',
+        seasonYear: 2021,
+        episodes: 1,
+        status: 'FINISHED',
+        averageScore: 84
+      }
+    );
+  } else if (targetId === 166531) {
+    // Oshi No Ko S2 -> S1
+    fallbackRelations.push({
+      id: 150672,
+      idMal: 52034,
+      relationType: 'PREQUEL',
+      title: { romaji: '[Oshi No Ko]', english: '[Oshi No Ko] Season 1', native: null },
+      coverImage: { extraLarge: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx150672-6jY3n7J9.jpg', large: '', medium: '', color: null },
+      format: 'TV',
+      season: 'SPRING',
+      seasonYear: 2023,
+      episodes: 11,
+      status: 'FINISHED',
+      averageScore: 87
+    });
+  }
+
   return {
-    id: ep ? ep.animeId : id,
+    id: targetId,
     idMal: ep ? ep.idMal || null : null,
     title: {
       romaji: ep ? ep.title.romaji : 'Anime Details',
@@ -887,6 +1041,7 @@ export async function fetchAnimeDetails(id: number): Promise<Anime | null> {
     averageScore: ep ? ep.averageScore || 85 : 85,
     status: 'RELEASING',
     seasonYear: 2024,
-    format: ep ? ep.format || 'TV' : 'TV'
+    format: ep ? ep.format || 'TV' : 'TV',
+    relations: fallbackRelations
   };
 }
