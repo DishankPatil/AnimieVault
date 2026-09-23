@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { fetchAnimeDetails } from '../services/anilist';
-import type { Anime } from '../services/anilist';
+import { fetchAnimeDetails, getSortedFranchiseMedia } from '../services/anilist';
+import type { Anime, FranchiseItem } from '../services/anilist';
 import { PlayerContainer } from '../components/PlayerContainer';
 import { ChevronLeft, ChevronRight, ArrowLeft, Loader2, Maximize2, Minimize2, Layers } from 'lucide-react';
 import { getPlayerPreferences, savePlayerPreferences, saveWatchHistory } from '../utils/preferences';
@@ -83,7 +83,7 @@ export const Watch: React.FC = () => {
   }, [animeId, currentEpisode]);
 
   const totalEpisodes = anime?.episodes || 24;
-  const relations = anime?.relations || [];
+  const franchiseItems: FranchiseItem[] = anime ? getSortedFranchiseMedia(anime) : [];
 
   // Determine stream ID based on selected source provider
   const targetStreamId = source === 'mal' && anime?.idMal ? anime.idMal : animeId;
@@ -180,35 +180,54 @@ export const Watch: React.FC = () => {
       </div>
 
       {/* Season & Installments Switcher */}
-      {relations.length > 0 && (
+      {franchiseItems.length > 1 && (
         <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 sm:p-6 mb-6">
-          <div className="flex items-center gap-2 mb-3">
-            <Layers className="size-5 text-teal-400" />
-            <h3 className="text-base font-bold text-slate-200">Switch Season / Installment</h3>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+            <div className="flex items-center gap-2">
+              <Layers className="size-5 text-teal-400" />
+              <h3 className="text-base font-bold text-slate-200">Switch Season / Installment</h3>
+            </div>
+            <span className="text-xs text-slate-400 font-medium">Release Order</span>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {/* Active Season Badge */}
-            <div className="bg-teal-500 text-slate-950 font-bold px-3.5 py-2 rounded-lg text-xs border border-teal-400 flex items-center gap-2 shadow-md">
-              <span className="w-2 h-2 rounded-full bg-slate-950 animate-pulse" />
-              <span>Current: {title}</span>
-            </div>
-
-            {/* Related Seasons */}
-            {relations.map((rel) => {
-              const relTitle = rel.title.english || rel.title.romaji;
-              const label = RELATION_LABELS[rel.relationType] || rel.relationType;
+          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
+            {franchiseItems.map((item) => {
+              const label = RELATION_LABELS[item.relationType] || (item.isCurrent ? 'NOW WATCHING' : item.relationType);
 
               return (
                 <button
-                  key={rel.id}
-                  onClick={() => navigate(`/watch/${rel.id}/1`)}
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-teal-400 font-semibold px-3.5 py-2 rounded-lg text-xs transition flex items-center gap-2"
+                  key={item.id}
+                  onClick={() => navigate(`/watch/${item.id}/1`)}
+                  className={`group relative rounded-lg overflow-hidden aspect-[2/3] border text-left transition-all duration-300 flex flex-col justify-end shadow-md cursor-pointer ${
+                    item.isCurrent
+                      ? 'border-2 border-teal-400 ring-2 ring-teal-500/30 scale-[1.02]'
+                      : 'border-slate-700 hover:border-teal-400 hover:scale-[1.02]'
+                  }`}
                 >
-                  <span className="text-[10px] uppercase font-bold text-teal-300 bg-teal-500/20 px-1.5 py-0.5 rounded">
-                    {label}
-                  </span>
-                  <span className="truncate max-w-[200px]">{relTitle}</span>
+                  <img
+                    src={item.coverImage}
+                    alt={item.title}
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx176500-TaqS5WJ1v8nC.jpg';
+                    }}
+                    className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  />
+                  <div className="absolute top-1.5 left-1.5 right-1.5 flex items-center justify-between gap-1 z-10">
+                    <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded shadow ${
+                      item.isCurrent ? 'bg-teal-500 text-slate-950 animate-pulse' : 'bg-slate-950/80 text-teal-300 backdrop-blur-sm border border-teal-500/30'
+                    }`}>
+                      {label}
+                    </span>
+                  </div>
+                  <div className="relative z-10 p-2 bg-gradient-to-t from-slate-950 via-slate-950/80 to-transparent pt-6">
+                    <h4 className="text-[11px] font-bold text-white line-clamp-1 group-hover:text-teal-300 transition">
+                      {item.title}
+                    </h4>
+                    <div className="text-[10px] text-teal-400 font-semibold flex items-center justify-between mt-0.5">
+                      <span>{item.startDateYear || item.seasonYear || ''}</span>
+                      {item.episodes && <span>{item.episodes} Ep</span>}
+                    </div>
+                  </div>
                 </button>
               );
             })}

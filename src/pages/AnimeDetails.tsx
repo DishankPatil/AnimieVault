@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { fetchAnimeDetails } from '../services/anilist';
-import type { Anime } from '../services/anilist';
+import { fetchAnimeDetails, getSortedFranchiseMedia } from '../services/anilist';
+import type { Anime, FranchiseItem } from '../services/anilist';
 import { Loader2, Star, Play, Calendar, Film, Heart, Layers } from 'lucide-react';
 import { isInWatchlist, toggleWatchlist } from '../utils/preferences';
 
@@ -107,7 +107,7 @@ export const AnimeDetails: React.FC = () => {
     ? allEpisodes.filter((ep) => ep.toString() === epFilter.trim() || ep.toString().includes(epFilter.trim()))
     : allEpisodes;
 
-  const relations = anime.relations || [];
+  const franchiseItems: FranchiseItem[] = getSortedFranchiseMedia(anime);
 
   return (
     <div>
@@ -203,57 +203,69 @@ export const AnimeDetails: React.FC = () => {
         </div>
 
         {/* Seasons & Franchise Media Section */}
-        {relations.length > 0 && (
+        {franchiseItems.length > 1 && (
           <div className="mt-12 bg-slate-900/60 border border-slate-800 rounded-xl p-5 sm:p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Layers className="size-6 text-teal-400" />
-              <h2 className="text-xl font-bold text-slate-100">Seasons & Related Media</h2>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-5">
+              <div className="flex items-center gap-2">
+                <Layers className="size-6 text-teal-400" />
+                <h2 className="text-xl sm:text-2xl font-bold text-slate-100">Seasons & Related Media</h2>
+              </div>
+              <span className="text-xs font-medium text-slate-400">
+                Arranged in release order ({franchiseItems.length} entries)
+              </span>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-              {/* Current Active Season */}
-              <div className="bg-teal-500/10 border-2 border-teal-500 rounded-lg p-3 flex flex-col justify-between relative overflow-hidden">
-                <span className="absolute top-2 right-2 bg-teal-500 text-slate-950 font-bold text-[10px] uppercase px-2 py-0.5 rounded-full shadow">
-                  Selected
-                </span>
-                <div className="space-y-1">
-                  <div className="text-xs font-bold text-teal-400">Current Entry</div>
-                  <h3 className="text-xs font-bold text-white line-clamp-2">{title}</h3>
-                </div>
-                <div className="mt-3 text-[11px] text-slate-400 font-semibold">
-                  {anime.format || 'TV'} {anime.seasonYear ? `• ${anime.seasonYear}` : ''} {totalEpisodes ? `• ${totalEpisodes} Ep` : ''}
-                </div>
-              </div>
-
-              {/* Related Seasons / Franchise Entries */}
-              {relations.map((rel) => {
-                const relTitle = rel.title.english || rel.title.romaji;
-                const label = RELATION_LABELS[rel.relationType] || rel.relationType;
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              {franchiseItems.map((item) => {
+                const label = RELATION_LABELS[item.relationType] || (item.isCurrent ? 'NOW WATCHING' : item.relationType);
 
                 return (
                   <Link
-                    key={rel.id}
-                    to={`/anime/${rel.id}`}
-                    className="bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 hover:border-teal-400 rounded-lg p-3 flex flex-col justify-between group transition shadow-md"
+                    key={item.id}
+                    to={`/anime/${item.id}`}
+                    className={`group relative rounded-xl overflow-hidden aspect-[2/3] border transition-all duration-300 flex flex-col justify-end shadow-xl ${
+                      item.isCurrent
+                        ? 'border-2 border-teal-400 ring-4 ring-teal-500/20 scale-[1.02]'
+                        : 'border-slate-700/80 hover:border-teal-400/80 hover:scale-[1.02]'
+                    }`}
                   >
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 group-hover:bg-teal-500/20 group-hover:text-teal-300">
+                    {/* Poster Cover Image */}
+                    <img
+                      src={item.coverImage}
+                      alt={item.title}
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx176500-TaqS5WJ1v8nC.jpg';
+                      }}
+                      className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    />
+
+                    {/* Top Badges */}
+                    <div className="absolute top-2 left-2 right-2 flex items-center justify-between gap-1 z-10">
+                      {item.isCurrent ? (
+                        <span className="bg-teal-500 text-slate-950 font-extrabold text-[10px] uppercase px-2 py-0.5 rounded-md shadow-md animate-pulse">
+                          NOW WATCHING
+                        </span>
+                      ) : (
+                        <span className="bg-slate-950/80 backdrop-blur-md text-teal-300 font-extrabold text-[10px] uppercase px-2 py-0.5 rounded-md border border-teal-500/30">
                           {label}
                         </span>
-                        {rel.format && (
-                          <span className="text-[10px] font-bold text-slate-400 uppercase">
-                            {rel.format}
-                          </span>
-                        )}
-                      </div>
-                      <h3 className="text-xs font-bold text-slate-200 group-hover:text-teal-300 transition line-clamp-2 mt-1">
-                        {relTitle}
-                      </h3>
+                      )}
+                      {item.format && (
+                        <span className="bg-slate-950/80 backdrop-blur-md text-slate-300 font-bold text-[10px] uppercase px-1.5 py-0.5 rounded-md border border-slate-700">
+                          {item.format}
+                        </span>
+                      )}
                     </div>
-                    <div className="mt-3 text-[11px] text-slate-400 font-medium flex items-center justify-between">
-                      <span>{rel.seasonYear || 'N/A'}</span>
-                      <span>{rel.episodes ? `${rel.episodes} Ep` : ''}</span>
+
+                    {/* Gradient Overlay & Details */}
+                    <div className="relative z-10 p-3 bg-gradient-to-t from-slate-950 via-slate-950/85 to-transparent pt-8">
+                      <h3 className="text-xs font-bold text-white group-hover:text-teal-300 transition line-clamp-2 leading-tight drop-shadow">
+                        {item.title}
+                      </h3>
+                      <div className="mt-1.5 flex items-center justify-between text-[11px] font-semibold text-teal-400">
+                        <span>{item.startDateYear || item.seasonYear || 'N/A'}</span>
+                        {item.episodes ? <span>{item.episodes} Ep</span> : null}
+                      </div>
                     </div>
                   </Link>
                 );

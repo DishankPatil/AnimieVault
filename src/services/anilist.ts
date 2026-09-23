@@ -16,6 +16,11 @@ export interface AnimeRelation {
   format: string | null;
   season: string | null;
   seasonYear: number | null;
+  startDate?: {
+    year: number | null;
+    month: number | null;
+    day: number | null;
+  } | null;
   episodes: number | null;
   status: string | null;
   averageScore: number | null;
@@ -45,7 +50,11 @@ export interface Anime {
   seasonYear: number | null;
   format: string | null;
   ageRating?: string | null;
-  startDate?: string | null;
+  startDate?: {
+    year: number | null;
+    month: number | null;
+    day: number | null;
+  } | string | null;
   relations?: AnimeRelation[];
 }
 
@@ -95,6 +104,11 @@ const ANIME_FIELDS = `
   status
   season
   seasonYear
+  startDate {
+    year
+    month
+    day
+  }
   format
 `;
 
@@ -856,6 +870,103 @@ export async function searchAnime(search: string, page: number = 1, perPage: num
   return { media: sliced, hasNextPage: start + perPage < matched.length };
 }
 
+export interface FranchiseItem {
+  id: number;
+  title: string;
+  coverImage: string;
+  format: string | null;
+  seasonYear: number | null;
+  startDateYear?: number | null;
+  startDateMonth?: number | null;
+  episodes: number | null;
+  relationType: string;
+  isCurrent: boolean;
+}
+
+export function getSortedFranchiseMedia(currentAnime: Anime): FranchiseItem[] {
+  const ANIME_FORMATS = new Set(['TV', 'TV_SHORT', 'MOVIE', 'SPECIAL', 'OVA', 'ONA']);
+
+  const itemsMap = new Map<number, FranchiseItem>();
+
+  let curYear: number | null = currentAnime.seasonYear || null;
+  let curMonth: number | null = null;
+  if (currentAnime.startDate) {
+    if (typeof currentAnime.startDate === 'object' && currentAnime.startDate !== null) {
+      curYear = currentAnime.startDate.year || curYear;
+      curMonth = currentAnime.startDate.month || null;
+    } else if (typeof currentAnime.startDate === 'string') {
+      const match = currentAnime.startDate.match(/^(\d{4})(?:-(\d{2}))?/);
+      if (match) {
+        curYear = parseInt(match[1], 10);
+        if (match[2]) curMonth = parseInt(match[2], 10);
+      }
+    }
+  }
+
+  const currentTitle = currentAnime.title.english || currentAnime.title.romaji;
+  const currentCover = currentAnime.coverImage.extraLarge || currentAnime.coverImage.large || currentAnime.coverImage.medium;
+
+  itemsMap.set(currentAnime.id, {
+    id: currentAnime.id,
+    title: currentTitle,
+    coverImage: currentCover,
+    format: currentAnime.format || 'TV',
+    seasonYear: currentAnime.seasonYear,
+    startDateYear: curYear,
+    startDateMonth: curMonth,
+    episodes: currentAnime.episodes,
+    relationType: 'CURRENT',
+    isCurrent: true,
+  });
+
+  if (currentAnime.relations && Array.isArray(currentAnime.relations)) {
+    for (const rel of currentAnime.relations) {
+      if (rel.format && !ANIME_FORMATS.has(rel.format.toUpperCase())) {
+        continue;
+      }
+      if (rel.relationType === 'ADAPTATION') {
+        continue;
+      }
+
+      if (!itemsMap.has(rel.id)) {
+        const relTitle = rel.title.english || rel.title.romaji;
+        const relCover = rel.coverImage.extraLarge || rel.coverImage.large || rel.coverImage.medium;
+        const relYear = rel.startDate?.year || rel.seasonYear || null;
+        const relMonth = rel.startDate?.month || null;
+
+        itemsMap.set(rel.id, {
+          id: rel.id,
+          title: relTitle,
+          coverImage: relCover,
+          format: rel.format || 'TV',
+          seasonYear: rel.seasonYear,
+          startDateYear: relYear,
+          startDateMonth: relMonth,
+          episodes: rel.episodes,
+          relationType: rel.relationType,
+          isCurrent: false,
+        });
+      }
+    }
+  }
+
+  const items = Array.from(itemsMap.values());
+
+  items.sort((a, b) => {
+    const yearA = a.startDateYear || a.seasonYear || 9999;
+    const yearB = b.startDateYear || b.seasonYear || 9999;
+    if (yearA !== yearB) return yearA - yearB;
+
+    const monthA = a.startDateMonth || 1;
+    const monthB = b.startDateMonth || 1;
+    if (monthA !== monthB) return monthA - monthB;
+
+    return a.id - b.id;
+  });
+
+  return items;
+}
+
 function parseRawRelations(media: any): AnimeRelation[] {
   if (!media?.relations?.edges || !Array.isArray(media.relations.edges)) {
     return [];
@@ -880,6 +991,11 @@ function parseRawRelations(media: any): AnimeRelation[] {
       format: edge.node.format || null,
       season: edge.node.season || null,
       seasonYear: edge.node.seasonYear || null,
+      startDate: edge.node.startDate ? {
+        year: edge.node.startDate.year || null,
+        month: edge.node.startDate.month || null,
+        day: edge.node.startDate.day || null,
+      } : null,
       episodes: edge.node.episodes || null,
       status: edge.node.status || null,
       averageScore: edge.node.averageScore || null,
@@ -915,6 +1031,11 @@ export async function fetchAnimeDetails(id: number): Promise<Anime | null> {
               format
               season
               seasonYear
+              startDate {
+                year
+                month
+                day
+              }
               episodes
               status
               averageScore
