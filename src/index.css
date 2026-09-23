@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand: #14b8a6;
+  --color-brand-foreground: #022c22;
+  --color-surface: #1e293b;
+  --color-border: #334155;
+}
+
+body {
+  background-color: #0f172a;
+  color: #f8fafc;
+}
+
+/* Custom Sleek Scrollbar for Dropdowns & Overflows */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0f172a;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #14b8a6;
+}
