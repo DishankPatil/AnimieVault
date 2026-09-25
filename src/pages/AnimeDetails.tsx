@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { fetchAnimeDetails, getSortedFranchiseMedia } from '../services/anilist';
+import { fetchAnimeDetails, getSortedFranchiseMedia, getEffectiveTotalEpisodes } from '../services/anilist';
 import type { Anime, FranchiseItem } from '../services/anilist';
-import { Loader2, Star, Play, Calendar, Film, Heart, Layers } from 'lucide-react';
+import { Loader2, Star, Play, Calendar, Film, Heart, Layers, Search, X, ChevronDown } from 'lucide-react';
 import { isInWatchlist, toggleWatchlist } from '../utils/preferences';
 
 function sanitizeDescription(description: string): string {
@@ -29,12 +29,25 @@ const RELATION_LABELS: Record<string, string> = {
   SUMMARY: 'Recap',
 };
 
+const CHUNK_SIZE = 100;
+
+function getEpisodeRanges(totalEpisodes: number, chunkSize = CHUNK_SIZE) {
+  const ranges: { start: number; end: number }[] = [];
+  for (let i = 1; i <= totalEpisodes; i += chunkSize) {
+    const end = Math.min(i + chunkSize - 1, totalEpisodes);
+    ranges.push({ start: i, end });
+  }
+  return ranges;
+}
+
 export const AnimeDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [anime, setAnime] = useState<Anime | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [bookmarked, setBookmarked] = useState<boolean>(false);
+  const [epFilter, setEpFilter] = useState<string>('');
+  const [selectedRangeIndex, setSelectedRangeIndex] = useState<number>(0);
 
   useEffect(() => {
     if (!id) return;
@@ -80,8 +93,6 @@ export const AnimeDetails: React.FC = () => {
     setBookmarked(added);
   };
 
-  const [epFilter, setEpFilter] = useState<string>('');
-
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-slate-400 gap-3">
@@ -100,12 +111,21 @@ export const AnimeDetails: React.FC = () => {
   }
 
   const title = anime.title.english || anime.title.romaji;
-  const totalEpisodes = anime.episodes || 12;
+  const totalEpisodes = getEffectiveTotalEpisodes(anime);
 
-  const allEpisodes = Array.from({ length: totalEpisodes }, (_, i) => i + 1);
-  const filteredEpisodes = epFilter.trim()
-    ? allEpisodes.filter((ep) => ep.toString() === epFilter.trim() || ep.toString().includes(epFilter.trim()))
-    : allEpisodes;
+  const ranges = getEpisodeRanges(totalEpisodes, CHUNK_SIZE);
+  let displayedEpisodes: number[] = [];
+  if (epFilter.trim()) {
+    displayedEpisodes = Array.from({ length: totalEpisodes }, (_, i) => i + 1).filter((ep) =>
+      ep.toString().includes(epFilter.trim())
+    );
+  } else {
+    const activeRange = ranges[selectedRangeIndex] || ranges[0] || { start: 1, end: totalEpisodes };
+    displayedEpisodes = Array.from(
+      { length: activeRange.end - activeRange.start + 1 },
+      (_, i) => activeRange.start + i
+    );
+  }
 
   const franchiseItems: FranchiseItem[] = getSortedFranchiseMedia(anime);
 
@@ -276,49 +296,76 @@ export const AnimeDetails: React.FC = () => {
 
         {/* Episodes Selector Grid */}
         <div className="mt-12">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
+            <div className="flex items-center gap-2 pt-1">
               <Film className="size-6 text-teal-400" />
               <h2 className="text-2xl font-bold text-slate-100">Episodes ({totalEpisodes})</h2>
             </div>
 
-            {/* Episode Quick Search Input */}
-            {totalEpisodes > 12 && (
-              <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl">
-                <span className="text-xs text-slate-400 font-semibold">Filter Ep:</span>
+            {/* Right Controls Container: Search Bar & Range Dropdown Below */}
+            <div className="flex flex-col items-stretch sm:items-end gap-2 w-full sm:w-auto">
+              {/* Episode Quick Search Input */}
+              <div className="flex items-center gap-2 bg-slate-900 border border-slate-700 px-3 py-1.5 rounded-xl w-full sm:w-auto">
+                <Search className="size-4 text-slate-400 shrink-0" />
                 <input
-                  type="number"
-                  min={1}
-                  max={totalEpisodes}
-                  placeholder={`1-${totalEpisodes}`}
+                  type="text"
+                  placeholder={`Search episode (1-${totalEpisodes})...`}
                   value={epFilter}
                   onChange={(e) => setEpFilter(e.target.value)}
-                  className="w-20 bg-slate-800 text-slate-200 text-xs font-mono px-2 py-1 rounded border border-slate-700 focus:outline-none focus:border-teal-500"
+                  className="bg-transparent text-slate-200 text-xs w-full sm:w-48 focus:outline-none placeholder-slate-500"
                 />
                 {epFilter && (
                   <button
                     onClick={() => setEpFilter('')}
-                    className="text-xs text-slate-400 hover:text-slate-200 font-bold"
+                    className="text-xs text-slate-400 hover:text-slate-200 font-bold cursor-pointer"
+                    title="Clear Search"
                   >
-                    Clear
+                    <X className="size-3.5" />
                   </button>
                 )}
               </div>
-            )}
+
+              {/* Range Select Dropdown (Positioned Below Search Episode Bar) */}
+              {ranges.length > 1 && !epFilter.trim() && (
+                <div className="flex items-center justify-between sm:justify-end gap-2 bg-slate-900/90 border border-slate-700/80 px-3 py-1.5 rounded-xl w-full sm:w-auto shadow-sm">
+                  <span className="text-xs font-semibold text-slate-400 shrink-0">Select Range:</span>
+                  <div className="relative flex items-center">
+                    <select
+                      value={selectedRangeIndex}
+                      onChange={(e) => setSelectedRangeIndex(Number(e.target.value))}
+                      className="appearance-none bg-slate-800 text-teal-300 font-extrabold text-xs pl-3 pr-7 py-1 rounded-lg border border-slate-700 focus:outline-none focus:border-teal-500 cursor-pointer shadow"
+                    >
+                      {ranges.map((range, index) => (
+                        <option key={index} value={index} className="bg-slate-900 text-slate-200 font-bold">
+                          {range.start} - {range.end}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="size-3.5 text-teal-400 absolute right-2 pointer-events-none" />
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="grid grid-cols-3 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-3 max-h-[480px] overflow-y-auto p-1">
-            {filteredEpisodes.map((ep) => (
-              <Link
-                key={ep}
-                to={`/watch/${anime.id}/${ep}`}
-                className="bg-slate-800/80 hover:bg-teal-500 hover:text-slate-950 text-slate-200 border border-slate-700 hover:border-teal-400 font-bold py-3 rounded-lg text-center transition flex flex-col items-center justify-center gap-1 group shadow-md"
-              >
-                <Play className="size-4 text-teal-400 group-hover:text-slate-950 fill-current" />
-                <span className="text-xs">Ep {ep}</span>
-              </Link>
-            ))}
-          </div>
+          {displayedEpisodes.length === 0 ? (
+            <div className="text-center py-8 text-slate-400 text-sm font-semibold">
+              No episode found matching "<span className="text-teal-400">{epFilter}</span>"
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-3 max-h-[480px] overflow-y-auto p-1">
+              {displayedEpisodes.map((ep) => (
+                <Link
+                  key={ep}
+                  to={`/watch/${anime.id}/${ep}`}
+                  className="bg-slate-800/80 hover:bg-teal-500 hover:text-slate-950 text-slate-200 border border-slate-700 hover:border-teal-400 font-bold py-3 rounded-lg text-center transition flex flex-col items-center justify-center gap-1 group shadow-md"
+                >
+                  <Play className="size-4 text-teal-400 group-hover:text-slate-950 fill-current" />
+                  <span className="text-xs">Ep {ep}</span>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

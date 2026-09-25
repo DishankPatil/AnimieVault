@@ -1,11 +1,13 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Play, Pause, FastForward, RotateCcw, RotateCw, Maximize, Clock, ShieldCheck } from 'lucide-react';
+import { Play, Pause, FastForward, RotateCcw, RotateCw, Maximize, Clock, ShieldCheck, Sliders, ChevronLeft, ChevronRight } from 'lucide-react';
 import { getPlayerPreferences, savePlayerPreferences } from '../utils/preferences';
+import type { VideoQuality } from '../utils/preferences';
 
 interface PlayerContainerProps {
   source?: 'mal' | 'anilist';
   animeId: number;
   episode: number;
+  totalEpisodes?: number;
   track: 'sub' | 'dub' | 'hsub';
   color: string;
   autoNext?: boolean;
@@ -13,12 +15,15 @@ interface PlayerContainerProps {
   onTrackChange: (track: 'sub' | 'dub' | 'hsub') => void;
   onColorChange: (color: string) => void;
   onSourceChange?: (source: 'mal' | 'anilist') => void;
+  onPrevEpisode?: () => void;
+  onNextEpisode?: () => void;
 }
 
 export const PlayerContainer: React.FC<PlayerContainerProps> = ({
   source = 'mal',
   animeId,
   episode,
+  totalEpisodes,
   track,
   color,
   autoNext = false,
@@ -26,6 +31,8 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
   onTrackChange,
   onColorChange,
   onSourceChange,
+  onPrevEpisode,
+  onNextEpisode,
 }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -33,6 +40,9 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
   const [playerServer, setPlayerServer] = useState<'zoko' | 'vidsrc' | 'autoembed'>(
     () => getPlayerPreferences().server
+  );
+  const [quality, setQuality] = useState<VideoQuality>(
+    () => getPlayerPreferences().quality || '1080p'
   );
   const [jumpTimeInput, setJumpTimeInput] = useState<string>('');
   const supportsRemoteControls = playerServer === 'zoko';
@@ -46,6 +56,21 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
     setPlayerServer(newServer);
     savePlayerPreferences({ server: newServer });
     setHasDisarmedAds(false);
+  };
+
+  const handleQualityChange = (newQuality: VideoQuality) => {
+    setQuality(newQuality);
+    savePlayerPreferences({ quality: newQuality });
+    if (supportsRemoteControls && iframeRef.current?.contentWindow) {
+      iframeRef.current.contentWindow.postMessage(
+        { channel: 'zokoanime', type: 'quality', quality: newQuality },
+        'https://zokoanime.video'
+      );
+      iframeRef.current.contentWindow.postMessage(
+        { channel: 'zokoanime', type: 'setQuality', quality: newQuality },
+        'https://zokoanime.video'
+      );
+    }
   };
 
   // Send Zokoanime postMessage command safely without clicking inside the iframe
@@ -67,6 +92,12 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
 
       if (msg.type === 'play') setIsPlaying(true);
       if (msg.type === 'pause') setIsPlaying(false);
+      if (msg.type === 'quality' || msg.type === 'qualitychange') {
+        const reportedQuality = (msg.quality || msg.data?.quality || msg.state?.quality)?.toString().toLowerCase();
+        if (reportedQuality && ['auto', '1080p', '720p', '480p', '360p'].includes(reportedQuality)) {
+          setQuality(reportedQuality as VideoQuality);
+        }
+      }
 
       const state = msg.state || msg.data || msg;
       const reportedTime = Number(state.currentTime ?? state.time ?? state.position);
@@ -85,9 +116,9 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
     return () => window.removeEventListener('message', handleMessage);
   }, [sendCommand]);
 
-  // Compute embed URL based on selected server
+  // Compute embed URL based on selected server & quality
   const cleanColor = color.replace('#', '');
-  let embedUrl = `https://zokoanime.video/stream/${source}/${animeId}/${episode}/${track}?color=${cleanColor}&autoplay=1&asi=1`;
+  let embedUrl = `https://zokoanime.video/stream/${source}/${animeId}/${episode}/${track}?color=${cleanColor}&quality=${quality}&autoplay=1&asi=1`;
   
   if (playerServer === 'vidsrc') {
     embedUrl = `https://vidsrc.cc/v2/embed/anime/${animeId}/${episode}`;
@@ -163,7 +194,7 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Server Selection & Ad Guard Header */}
+      {/* Server Selection & Stream Header (Upper Area Panel) */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0">
           <span className="font-semibold text-slate-400 uppercase tracking-wider">Stream Server:</span>
@@ -176,7 +207,7 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              Zokoanime (Zero-Ad Remote)
+              Zokoanime (Remote Deck)
             </button>
             <button
               onClick={() => handleServerChange('vidsrc')}
@@ -201,10 +232,40 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
           </div>
         </div>
 
-        {/* Ad Protection Status Badge */}
-        <div className="flex items-center gap-2 bg-teal-500/10 border border-teal-500/30 text-teal-400 px-3 py-1.5 rounded-lg text-[11px] font-extrabold shrink-0">
-          <ShieldCheck className="size-4 text-teal-400" />
-          <span>Popup Guard Active • Full Quality Unlocked</span>
+        {/* Upper Area Panel Controls: Episode Navigation & Quality Badge */}
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap sm:flex-nowrap shrink-0">
+          {(onPrevEpisode || onNextEpisode) && (
+            <div className="flex items-center gap-1.5 bg-slate-800/80 p-1 rounded-lg border border-slate-700">
+              {onPrevEpisode && (
+                <button
+                  onClick={onPrevEpisode}
+                  disabled={episode <= 1}
+                  className="bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-200 border border-slate-700 px-2.5 py-1 rounded-md text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
+                  title="Previous Episode"
+                >
+                  <ChevronLeft className="size-3.5" /> Previous
+                </button>
+              )}
+              <span className="text-[11px] font-extrabold text-teal-400 px-1 whitespace-nowrap">
+                Ep {episode}{totalEpisodes ? ` / ${totalEpisodes}` : ''}
+              </span>
+              {onNextEpisode && (
+                <button
+                  onClick={onNextEpisode}
+                  disabled={totalEpisodes ? episode >= totalEpisodes : false}
+                  className="bg-teal-500 hover:bg-teal-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 px-2.5 py-1 rounded-md text-xs font-bold flex items-center gap-1 transition shadow-md shadow-teal-500/20 cursor-pointer"
+                  title="Next Episode"
+                >
+                  Next Ep <ChevronRight className="size-3.5" />
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className="flex items-center gap-1.5 bg-teal-500/10 border border-teal-500/30 text-teal-400 px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold shrink-0">
+            <ShieldCheck className="size-4 text-teal-400" />
+            <span>Remote Engine Active • Quality: {quality === 'auto' ? 'AUTO' : quality}</span>
+          </div>
         </div>
       </div>
 
@@ -311,8 +372,32 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
           )}
         </div>
 
-        {/* Secondary Options */}
+        {/* Secondary Options: Quality, Provider, Track, Skin Color & Fullscreen */}
         <div className="flex flex-wrap items-center gap-3 min-w-0">
+          {playerServer === 'zoko' && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-slate-400 uppercase flex items-center gap-1">
+                <Sliders className="size-3.5 text-teal-400" />
+                Quality:
+              </span>
+              <div className="flex bg-slate-800 p-1 rounded-lg border border-slate-700">
+                {(['1080p', '720p', '480p', '360p', 'auto'] as const).map((q) => (
+                  <button
+                    key={q}
+                    onClick={() => handleQualityChange(q)}
+                    className={`px-2 py-1 text-xs font-extrabold rounded uppercase transition cursor-pointer ${
+                      quality === q
+                        ? 'bg-teal-500 text-slate-950 shadow-md shadow-teal-500/20'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {q === 'auto' ? 'Auto' : q}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {onSourceChange && playerServer === 'zoko' && (
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold text-slate-400 uppercase">Provider:</span>
@@ -381,3 +466,4 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
     </div>
   );
 };
+

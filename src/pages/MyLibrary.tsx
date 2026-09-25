@@ -85,7 +85,7 @@ export const MyLibrary: React.FC = () => {
                 to="/"
                 className="inline-flex items-center gap-2 mt-6 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold px-5 py-2.5 rounded-xl text-xs transition shadow-lg shadow-teal-500/20"
               >
-                <span>Browse Anime Catalog</span>
+                <span>Browse Anime</span>
                 <ArrowRight className="size-4" />
               </Link>
             </div>

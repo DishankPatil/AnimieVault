@@ -43,6 +43,9 @@ export interface Anime {
   bannerImage: string | null;
   description: string | null;
   episodes: number | null;
+  nextAiringEpisode?: {
+    episode: number;
+  } | null;
   genres: string[];
   averageScore: number | null;
   status: string | null;
@@ -99,6 +102,9 @@ const ANIME_FIELDS = `
   bannerImage
   description
   episodes
+  nextAiringEpisode {
+    episode
+  }
   genres
   averageScore
   status
@@ -111,6 +117,34 @@ const ANIME_FIELDS = `
   }
   format
 `;
+
+export function getEffectiveTotalEpisodes(anime: Anime | null | undefined): number {
+  if (!anime) return 24;
+
+  // Unreleased anime have 0 released episodes
+  if (anime.status === 'NOT_YET_RELEASED') {
+    return 0;
+  }
+
+  // If currently releasing and AniList has nextAiringEpisode (e.g., ep 1180 airs next => 1179 currently released)
+  if (anime.nextAiringEpisode?.episode && anime.nextAiringEpisode.episode > 1) {
+    return anime.nextAiringEpisode.episode - 1;
+  }
+
+  // If finished or completed season with confirmed episode count
+  if (anime.episodes && anime.episodes > 0) {
+    return anime.episodes;
+  }
+
+  // Fallbacks for active releasing anime missing nextAiringEpisode schedule
+  if (anime.status === 'RELEASING') {
+    if (anime.id === 21 || anime.idMal === 21) return 1180; // One Piece
+    if (anime.id === 235 || anime.idMal === 235) return 1214; // Detective Conan
+    return 50;
+  }
+
+  return 24;
+}
 
 const FALLBACK_RECENT_EPISODES: RecentEpisode[] = [
   {
@@ -885,6 +919,7 @@ export interface FranchiseItem {
 
 export function getSortedFranchiseMedia(currentAnime: Anime): FranchiseItem[] {
   const ANIME_FORMATS = new Set(['TV', 'TV_SHORT', 'MOVIE', 'SPECIAL', 'OVA', 'ONA']);
+  const ALLOWED_RELATION_TYPES = new Set(['PREQUEL', 'SEQUEL', 'PARENT', 'SIDE_STORY', 'SPIN_OFF', 'ALTERNATIVE', 'SUMMARY']);
 
   const itemsMap = new Map<number, FranchiseItem>();
 
@@ -924,7 +959,7 @@ export function getSortedFranchiseMedia(currentAnime: Anime): FranchiseItem[] {
       if (rel.format && !ANIME_FORMATS.has(rel.format.toUpperCase())) {
         continue;
       }
-      if (rel.relationType === 'ADAPTATION') {
+      if (!ALLOWED_RELATION_TYPES.has(rel.relationType.toUpperCase())) {
         continue;
       }
 
@@ -971,8 +1006,19 @@ function parseRawRelations(media: any): AnimeRelation[] {
   if (!media?.relations?.edges || !Array.isArray(media.relations.edges)) {
     return [];
   }
+
+  const ANIME_FORMATS = new Set(['TV', 'TV_SHORT', 'MOVIE', 'SPECIAL', 'OVA', 'ONA']);
+  const ALLOWED_RELATION_TYPES = new Set(['PREQUEL', 'SEQUEL', 'PARENT', 'SIDE_STORY', 'SPIN_OFF', 'ALTERNATIVE', 'SUMMARY']);
+
   return media.relations.edges
-    .filter((edge: any) => edge && edge.node && edge.node.id)
+    .filter((edge: any) => {
+      if (!edge || !edge.node || !edge.node.id) return false;
+      const format = (edge.node.format || '').toUpperCase();
+      const relationType = (edge.relationType || '').toUpperCase();
+
+      // Only allow anime video formats and direct franchise relation types (exclude CHARACTER, OTHER, ADAPTATION, etc.)
+      return ANIME_FORMATS.has(format) && ALLOWED_RELATION_TYPES.has(relationType);
+    })
     .map((edge: any) => ({
       id: edge.node.id,
       idMal: edge.node.idMal || null,

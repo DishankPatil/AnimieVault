@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { Search, Film, Tv, Zap, Loader2, Star, ChevronRight, Heart, X } from 'lucide-react';
+import { Search, Tv, Zap, Loader2, Star, ChevronRight, Heart, X, Home } from 'lucide-react';
 import { searchAnime } from '../services/anilist';
 import type { Anime } from '../services/anilist';
 import { getWatchlist, getWatchHistory } from '../utils/preferences';
@@ -17,8 +17,20 @@ export const Navbar: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Derive library badge count directly during render
-  const libraryCount = getWatchlist().length + getWatchHistory().length;
+  // Derive reactive library badge count
+  const [libraryCount, setLibraryCount] = useState<number>(() => getWatchlist().length + getWatchHistory().length);
+
+  useEffect(() => {
+    const updateCount = () => {
+      setLibraryCount(getWatchlist().length + getWatchHistory().length);
+    };
+    window.addEventListener('movui:library-updated', updateCount);
+    window.addEventListener('storage', updateCount);
+    return () => {
+      window.removeEventListener('movui:library-updated', updateCount);
+      window.removeEventListener('storage', updateCount);
+    };
+  }, []);
 
   // Debounced live suggestion fetcher
   useEffect(() => {
@@ -248,8 +260,8 @@ export const Navbar: React.FC = () => {
                 : 'text-slate-300 hover:text-teal-400 hover:bg-slate-800/60'
             }`}
           >
-            <Film className="size-4" />
-            <span>Catalog</span>
+            <Home className="size-4" />
+            <span>Home</span>
           </Link>
 
           <Link
