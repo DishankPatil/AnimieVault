@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Play, Pause, FastForward, RotateCcw, RotateCw, Maximize, Clock, ShieldCheck, Sliders, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Play, Pause, FastForward, RotateCcw, RotateCw, Maximize, Clock, ShieldCheck, Sliders, ChevronLeft, ChevronRight, ServerCrash, RefreshCw, Loader2 } from 'lucide-react';
 import { getPlayerPreferences, savePlayerPreferences } from '../utils/preferences';
 import type { VideoQuality } from '../utils/preferences';
 
@@ -38,30 +38,60 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
-  const [playerServer, setPlayerServer] = useState<'zoko' | 'vidsrc' | 'autoembed'>(
-    () => getPlayerPreferences().server
-  );
   const [quality, setQuality] = useState<VideoQuality>(
     () => getPlayerPreferences().quality || '1080p'
   );
   const [jumpTimeInput, setJumpTimeInput] = useState<string>('');
-  const supportsRemoteControls = playerServer === 'zoko';
+  const supportsRemoteControls = true;
   const currentTimeRef = useRef<number>(0);
   const pendingSeekRef = useRef<number | null>(null);
+
+  // Server health state
+  const [isServerDown, setIsServerDown] = useState<boolean>(false);
+  const [isCheckingServer, setIsCheckingServer] = useState<boolean>(true);
+  const [retryKey, setRetryKey] = useState<number>(0);
 
   // Invisible 1-time click absorber state to disarm initial clickjacking overlays without obscuring video quality
   const [hasDisarmedAds, setHasDisarmedAds] = useState<boolean>(false);
 
-  const handleServerChange = (newServer: 'zoko' | 'vidsrc' | 'autoembed') => {
-    setPlayerServer(newServer);
-    savePlayerPreferences({ server: newServer });
-    setHasDisarmedAds(false);
-  };
+  // Ping server health whenever source/animeId/episode/track/retryKey changes
+  useEffect(() => {
+    let isMounted = true;
+    setIsCheckingServer(true);
+    setIsServerDown(false);
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => {
+      controller.abort();
+    }, 5000);
+
+    fetch('https://zokoanime.video', { mode: 'no-cors', signal: controller.signal })
+      .then(() => {
+        window.clearTimeout(timeoutId);
+        if (isMounted) {
+          setIsCheckingServer(false);
+          setIsServerDown(false);
+        }
+      })
+      .catch(() => {
+        window.clearTimeout(timeoutId);
+        if (isMounted) {
+          setIsCheckingServer(false);
+          setIsServerDown(true);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+      window.clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, [source, animeId, episode, track, retryKey]);
 
   const handleQualityChange = (newQuality: VideoQuality) => {
     setQuality(newQuality);
     savePlayerPreferences({ quality: newQuality });
-    if (supportsRemoteControls && iframeRef.current?.contentWindow) {
+    if (iframeRef.current?.contentWindow) {
       iframeRef.current.contentWindow.postMessage(
         { channel: 'zokoanime', type: 'quality', quality: newQuality },
         'https://zokoanime.video'
@@ -75,18 +105,23 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
 
   // Send Zokoanime postMessage command safely without clicking inside the iframe
   const sendCommand = useCallback((msg: object) => {
-    if (supportsRemoteControls && iframeRef.current?.contentWindow) {
+    if (iframeRef.current?.contentWindow) {
       iframeRef.current.contentWindow.postMessage(
         { channel: 'zokoanime', ...msg },
         'https://zokoanime.video'
       );
     }
-  }, [supportsRemoteControls]);
+  }, []);
 
   // Listen for player events to sync playback status
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (event.origin !== 'https://zokoanime.video') return;
+      
+      // If we receive any message from zokoanime, server is online
+      setIsServerDown(false);
+      setIsCheckingServer(false);
+
       const msg = event.data;
       if (!msg || msg.channel !== 'zokoanime') return;
 
@@ -118,13 +153,7 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
 
   // Compute embed URL based on selected server & quality
   const cleanColor = color.replace('#', '');
-  let embedUrl = `https://zokoanime.video/stream/${source}/${animeId}/${episode}/${track}?color=${cleanColor}&quality=${quality}&autoplay=1&asi=1`;
-  
-  if (playerServer === 'vidsrc') {
-    embedUrl = `https://vidsrc.cc/v2/embed/anime/${animeId}/${episode}`;
-  } else if (playerServer === 'autoembed') {
-    embedUrl = `https://player.autoembed.cc/embed/anime/${animeId}/${episode}`;
-  }
+  const embedUrl = `https://zokoanime.video/stream/${source}/${animeId}/${episode}/${track}?color=${cleanColor}&quality=${quality}&autoplay=1&asi=1`;
 
   const togglePlay = () => {
     if (isPlaying) {
@@ -194,42 +223,13 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Server Selection & Stream Header (Upper Area Panel) */}
+      {/* Stream Header (Upper Area Panel) */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0">
           <span className="font-semibold text-slate-400 uppercase tracking-wider">Stream Server:</span>
-          <div className="flex flex-wrap bg-slate-800 p-1 rounded-lg border border-slate-700 w-full sm:w-auto">
-            <button
-              onClick={() => handleServerChange('zoko')}
-              className={`px-2.5 sm:px-3 py-1 font-extrabold rounded-md transition flex-1 sm:flex-none ${
-                playerServer === 'zoko'
-                  ? 'bg-teal-500 text-slate-950 shadow-md shadow-teal-500/20'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Zokoanime (Remote Deck)
-            </button>
-            <button
-              onClick={() => handleServerChange('vidsrc')}
-              className={`px-2.5 sm:px-3 py-1 font-extrabold rounded-md transition flex-1 sm:flex-none ${
-                playerServer === 'vidsrc'
-                  ? 'bg-teal-500 text-slate-950 shadow-md shadow-teal-500/20'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              VidSrc
-            </button>
-            <button
-              onClick={() => handleServerChange('autoembed')}
-              className={`px-2.5 sm:px-3 py-1 font-extrabold rounded-md transition flex-1 sm:flex-none ${
-                playerServer === 'autoembed'
-                  ? 'bg-teal-500 text-slate-950 shadow-md shadow-teal-500/20'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              AutoEmbed
-            </button>
-          </div>
+          <span className="bg-slate-800 text-teal-400 border border-slate-700 font-extrabold px-3 py-1 rounded-md">
+            Zokoanime Engine
+          </span>
         </div>
 
         {/* Upper Area Panel Controls: Episode Navigation & Quality Badge */}
@@ -262,9 +262,29 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
             </div>
           )}
 
-          <div className="flex items-center gap-1.5 bg-teal-500/10 border border-teal-500/30 text-teal-400 px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold shrink-0">
-            <ShieldCheck className="size-4 text-teal-400" />
-            <span>Remote Engine Active • Quality: {quality === 'auto' ? 'AUTO' : quality}</span>
+          <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold shrink-0 border ${
+            isServerDown
+              ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+              : isCheckingServer
+              ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+              : 'bg-teal-500/10 border-teal-500/30 text-teal-400'
+          }`}>
+            {isServerDown ? (
+              <>
+                <ServerCrash className="size-4 text-rose-400 animate-pulse" />
+                <span>Server Down / Offline</span>
+              </>
+            ) : isCheckingServer ? (
+              <>
+                <Loader2 className="size-4 text-amber-400 animate-spin" />
+                <span>Checking Server Connection...</span>
+              </>
+            ) : (
+              <>
+                <ShieldCheck className="size-4 text-teal-400" />
+                <span>Remote Engine Active • Quality: {quality === 'auto' ? 'AUTO' : quality}</span>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -274,17 +294,55 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
         ref={containerRef}
         className="relative w-full aspect-video bg-black rounded-xl overflow-hidden shadow-2xl border border-slate-800 group"
       >
-        <iframe
-          ref={iframeRef}
-          key={embedUrl}
-          src={embedUrl}
-          title={`Streaming Episode ${episode}`}
-          className="w-full h-full border-0"
-          allow="autoplay; fullscreen"
-          allowFullScreen
-        />
+        {isServerDown ? (
+          <div className="absolute inset-0 z-30 bg-slate-950/95 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center border border-slate-800">
+            <div className="bg-rose-500/10 p-4 rounded-full border border-rose-500/30 mb-4 animate-pulse">
+              <ServerCrash className="size-12 text-rose-500" />
+            </div>
+            <h3 className="text-lg sm:text-xl font-black text-slate-100 mb-2">
+              Anime Stream Server Error
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-400 max-w-md mb-5 leading-relaxed">
+              The stream server (<span className="text-slate-200 font-mono font-semibold">zokoanime.video</span>) is currently unreachable or taking too long to respond.
+            </p>
 
-        {!hasDisarmedAds && (
+            <div className="bg-slate-900 border border-slate-800 p-3.5 rounded-xl text-left text-xs text-slate-400 max-w-md w-full mb-6 flex flex-col gap-2 shadow-inner">
+              <span className="font-bold text-slate-300">Server Diagnostic:</span>
+              <span className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"></span>
+                <span>Status: <strong className="text-rose-400 font-semibold">Server Down / Connection Timeout</strong></span>
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-500 shrink-0"></span>
+                <span>Details: Unable to connect to host domain.</span>
+              </span>
+            </div>
+
+            <button
+              onClick={() => setRetryKey((prev) => prev + 1)}
+              className="bg-teal-500 hover:bg-teal-400 text-slate-950 font-extrabold px-5 py-2.5 rounded-xl text-xs flex items-center gap-2 transition shadow-lg shadow-teal-500/20 cursor-pointer"
+            >
+              <RefreshCw className="size-4" />
+              <span>Retry Connection</span>
+            </button>
+          </div>
+        ) : (
+          <iframe
+            ref={iframeRef}
+            key={`${embedUrl}-${retryKey}`}
+            src={embedUrl}
+            title={`Streaming Episode ${episode}`}
+            className="w-full h-full border-0"
+            allow="autoplay; fullscreen"
+            allowFullScreen
+            onError={() => {
+              setIsServerDown(true);
+              setIsCheckingServer(false);
+            }}
+          />
+        )}
+
+        {!isServerDown && !hasDisarmedAds && (
           <div
             onClick={handleInvisibleFirstClick}
             className="absolute inset-0 z-20 cursor-pointer bg-transparent"
@@ -342,15 +400,13 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
             </button>
           </form>
 
-          {playerServer === 'zoko' && (
-            <button
-              onClick={handleSkipIntro}
-              className="bg-slate-800 hover:bg-slate-700 text-teal-300 p-2 rounded-lg text-xs font-bold flex items-center gap-1.5 border border-slate-700 transition cursor-pointer"
-              title="Auto Skip Intro/Outro"
-            >
-              <FastForward className="size-4" /> Skip Intro
-            </button>
-          )}
+          <button
+            onClick={handleSkipIntro}
+            className="bg-slate-800 hover:bg-slate-700 text-teal-300 p-2 rounded-lg text-xs font-bold flex items-center gap-1.5 border border-slate-700 transition cursor-pointer"
+            title="Auto Skip Intro/Outro"
+          >
+            <FastForward className="size-4" /> Skip Intro
+          </button>
 
           {onAutoNextToggle && (
             <button
@@ -366,39 +422,33 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
               <span>Auto-Next: {autoNext ? 'ON' : 'OFF'}</span>
             </button>
           )}
-
-          {!supportsRemoteControls && (
-            <span className="text-[11px] text-slate-500 font-medium">Remote deck active on Zokoanime</span>
-          )}
         </div>
 
         {/* Secondary Options: Quality, Provider, Track, Skin Color & Fullscreen */}
         <div className="flex flex-wrap items-center gap-3 min-w-0">
-          {playerServer === 'zoko' && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-400 uppercase flex items-center gap-1">
-                <Sliders className="size-3.5 text-teal-400" />
-                Quality:
-              </span>
-              <div className="flex bg-slate-800 p-1 rounded-lg border border-slate-700">
-                {(['1080p', '720p', '480p', '360p', 'auto'] as const).map((q) => (
-                  <button
-                    key={q}
-                    onClick={() => handleQualityChange(q)}
-                    className={`px-2 py-1 text-xs font-extrabold rounded uppercase transition cursor-pointer ${
-                      quality === q
-                        ? 'bg-teal-500 text-slate-950 shadow-md shadow-teal-500/20'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    {q === 'auto' ? 'Auto' : q}
-                  </button>
-                ))}
-              </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-slate-400 uppercase flex items-center gap-1">
+              <Sliders className="size-3.5 text-teal-400" />
+              Quality:
+            </span>
+            <div className="flex bg-slate-800 p-1 rounded-lg border border-slate-700">
+              {(['1080p', '720p', '480p', '360p', 'auto'] as const).map((q) => (
+                <button
+                  key={q}
+                  onClick={() => handleQualityChange(q)}
+                  className={`px-2 py-1 text-xs font-extrabold rounded uppercase transition cursor-pointer ${
+                    quality === q
+                      ? 'bg-teal-500 text-slate-950 shadow-md shadow-teal-500/20'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {q === 'auto' ? 'Auto' : q}
+                </button>
+              ))}
             </div>
-          )}
+          </div>
 
-          {onSourceChange && playerServer === 'zoko' && (
+          {onSourceChange && (
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold text-slate-400 uppercase">Provider:</span>
               <div className="flex bg-slate-800 p-1 rounded-lg border border-slate-700">
@@ -419,40 +469,36 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
             </div>
           )}
 
-          {playerServer === 'zoko' && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-400 uppercase">Track:</span>
-              <div className="flex bg-slate-800 p-1 rounded-lg border border-slate-700">
-                {(['sub', 'dub', 'hsub'] as const).map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => onTrackChange(t)}
-                    className={`px-2.5 py-1 text-xs font-bold rounded uppercase transition cursor-pointer ${
-                      track === t
-                        ? 'bg-teal-500 text-slate-950'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-slate-400 uppercase">Track:</span>
+            <div className="flex bg-slate-800 p-1 rounded-lg border border-slate-700">
+              {(['sub', 'dub', 'hsub'] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => onTrackChange(t)}
+                  className={`px-2.5 py-1 text-xs font-bold rounded uppercase transition cursor-pointer ${
+                    track === t
+                      ? 'bg-teal-500 text-slate-950'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
             </div>
-          )}
+          </div>
 
-          {playerServer === 'zoko' && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-400 uppercase">Skin:</span>
-              <div className="flex items-center gap-2 bg-slate-800 px-2.5 py-1 rounded border border-slate-700">
-                <input
-                  type="color"
-                  value={color}
-                  onChange={(e) => onColorChange(e.target.value)}
-                  className="w-4 h-4 bg-transparent border-0 cursor-pointer"
-                />
-              </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-slate-400 uppercase">Skin:</span>
+            <div className="flex items-center gap-2 bg-slate-800 px-2.5 py-1 rounded border border-slate-700">
+              <input
+                type="color"
+                value={color}
+                onChange={(e) => onColorChange(e.target.value)}
+                className="w-4 h-4 bg-transparent border-0 cursor-pointer"
+              />
             </div>
-          )}
+          </div>
 
           <button
             onClick={handleFullscreen}

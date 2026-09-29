@@ -1,7 +1,7 @@
 export type VideoQuality = 'auto' | '1080p' | '720p' | '480p' | '360p';
 
 export interface PlayerPreferences {
-  server: 'zoko' | 'vidsrc' | 'autoembed';
+  server: 'zoko';
   track: 'sub' | 'dub' | 'hsub';
   color: string;
   source: 'mal' | 'anilist';
@@ -24,7 +24,7 @@ export function getPlayerPreferences(): PlayerPreferences {
     if (saved) {
       const parsed = JSON.parse(saved);
       return {
-        server: ['zoko', 'vidsrc', 'autoembed'].includes(parsed.server) ? parsed.server : DEFAULT_PREFS.server,
+        server: 'zoko',
         track: ['sub', 'dub', 'hsub'].includes(parsed.track) ? parsed.track : DEFAULT_PREFS.track,
         color: typeof parsed.color === 'string' && parsed.color.startsWith('#') ? parsed.color : DEFAULT_PREFS.color,
         source: ['mal', 'anilist'].includes(parsed.source) ? parsed.source : DEFAULT_PREFS.source,
