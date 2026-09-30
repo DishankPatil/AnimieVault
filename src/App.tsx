@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { Analytics } from '@vercel/analytics/react';
 import { Navbar } from './components/Navbar';
 import { Home } from './pages/Home';
 import { RecentEpisodes } from './pages/RecentEpisodes';
@@ -30,6 +31,7 @@ export const App: React.FC = () => {
           <p>© {new Date().getFullYear()} AnimeVault. Powered by AniList & Zokoanime Embed Engine.</p>
         </footer>
       </div>
+      <Analytics />
     </BrowserRouter>
   );
 };
