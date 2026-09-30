@@ -60,6 +60,11 @@ export const Watch: React.FC = () => {
     savePlayerPreferences({ source: newSource });
   };
 
+  // Scroll to top immediately when landing on Watch page or switching episodes
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+  }, [animeId, currentEpisode]);
+
   useEffect(() => {
     if (!animeId) return;
     let isMounted = true;
@@ -144,9 +149,9 @@ export const Watch: React.FC = () => {
   }
 
   return (
-    <div className={`transition-all duration-300 ${isTheaterMode ? 'bg-slate-950/95 py-2' : 'max-w-7xl mx-auto px-4 sm:px-6 py-6'}`}>
+    <div className={`transition-all duration-300 ${isTheaterMode ? 'bg-slate-950/95 py-2' : 'max-w-7xl mx-auto px-3 sm:px-6 py-2 sm:py-3'}`}>
       {/* Back Button & Header Bar */}
-      <div className="flex items-center justify-between gap-3 mb-4 px-1 sm:px-2">
+      <div className="flex items-center justify-between gap-3 mb-2 sm:mb-3 px-1 sm:px-2">
         <div className="flex items-center gap-3 min-w-0">
           <Link
             to={`/anime/${animeId}`}

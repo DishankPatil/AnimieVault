@@ -1,7 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Play, Pause, FastForward, RotateCcw, RotateCw, Maximize, Clock, ShieldCheck, Sliders, ChevronLeft, ChevronRight, ServerCrash, RefreshCw, Loader2 } from 'lucide-react';
-import { getPlayerPreferences, savePlayerPreferences } from '../utils/preferences';
-import type { VideoQuality } from '../utils/preferences';
+import { Play, Pause, FastForward, RotateCcw, RotateCw, Maximize, Minimize, Clock, ShieldCheck, ChevronLeft, ChevronRight, ServerCrash, RefreshCw, Loader2 } from 'lucide-react';
 
 interface PlayerContainerProps {
   source?: 'mal' | 'anilist';
@@ -38,13 +36,31 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
-  const [quality, setQuality] = useState<VideoQuality>(
-    () => getPlayerPreferences().quality || '1080p'
-  );
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [jumpTimeInput, setJumpTimeInput] = useState<string>('');
   const supportsRemoteControls = true;
   const currentTimeRef = useRef<number>(0);
   const pendingSeekRef = useRef<number | null>(null);
+
+  // Sync fullscreen state & intercept mobile back gestures to exit fullscreen
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    const handlePopState = () => {
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, []);
 
   // Server health state
   const [isServerDown, setIsServerDown] = useState<boolean>(false);
@@ -53,6 +69,16 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
 
   // Invisible 1-time click absorber state to disarm initial clickjacking overlays without obscuring video quality
   const [hasDisarmedAds, setHasDisarmedAds] = useState<boolean>(false);
+
+  // Send Zokoanime postMessage command safely without clicking inside the iframe
+  const sendCommand = useCallback((msg: object) => {
+    if (iframeRef.current?.contentWindow) {
+      iframeRef.current.contentWindow.postMessage(
+        { channel: 'zokoanime', ...msg },
+        'https://zokoanime.video'
+      );
+    }
+  }, []);
 
   // Ping server health whenever source/animeId/episode/track/retryKey changes
   useEffect(() => {
@@ -88,31 +114,6 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
     };
   }, [source, animeId, episode, track, retryKey]);
 
-  const handleQualityChange = (newQuality: VideoQuality) => {
-    setQuality(newQuality);
-    savePlayerPreferences({ quality: newQuality });
-    if (iframeRef.current?.contentWindow) {
-      iframeRef.current.contentWindow.postMessage(
-        { channel: 'zokoanime', type: 'quality', quality: newQuality },
-        'https://zokoanime.video'
-      );
-      iframeRef.current.contentWindow.postMessage(
-        { channel: 'zokoanime', type: 'setQuality', quality: newQuality },
-        'https://zokoanime.video'
-      );
-    }
-  };
-
-  // Send Zokoanime postMessage command safely without clicking inside the iframe
-  const sendCommand = useCallback((msg: object) => {
-    if (iframeRef.current?.contentWindow) {
-      iframeRef.current.contentWindow.postMessage(
-        { channel: 'zokoanime', ...msg },
-        'https://zokoanime.video'
-      );
-    }
-  }, []);
-
   // Listen for player events to sync playback status
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -127,12 +128,6 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
 
       if (msg.type === 'play') setIsPlaying(true);
       if (msg.type === 'pause') setIsPlaying(false);
-      if (msg.type === 'quality' || msg.type === 'qualitychange') {
-        const reportedQuality = (msg.quality || msg.data?.quality || msg.state?.quality)?.toString().toLowerCase();
-        if (reportedQuality && ['auto', '1080p', '720p', '480p', '360p'].includes(reportedQuality)) {
-          setQuality(reportedQuality as VideoQuality);
-        }
-      }
 
       const state = msg.state || msg.data || msg;
       const reportedTime = Number(state.currentTime ?? state.time ?? state.position);
@@ -151,25 +146,23 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
     return () => window.removeEventListener('message', handleMessage);
   }, [sendCommand]);
 
-  // Compute embed URL based on selected server & quality
+  // Compute embed URL defaulting initial stream request to lowest quality (360p) for fastest load time
   const cleanColor = color.replace('#', '');
-  const embedUrl = `https://zokoanime.video/stream/${source}/${animeId}/${episode}/${track}?color=${cleanColor}&quality=${quality}&autoplay=1&asi=1`;
+  const embedUrl = `https://zokoanime.video/stream/${source}/${animeId}/${episode}/${track}?color=${cleanColor}&quality=360p&autoplay=1&asi=1`;
 
-  const togglePlay = () => {
-    if (isPlaying) {
-      sendCommand({ type: 'pause' });
-      setIsPlaying(false);
-    } else {
-      sendCommand({ type: 'play' });
-      setIsPlaying(true);
-    }
-  };
+  const togglePlay = useCallback(() => {
+    setIsPlaying((prev) => {
+      const nextState = !prev;
+      sendCommand({ type: nextState ? 'play' : 'pause' });
+      return nextState;
+    });
+  }, [sendCommand]);
 
   const handleSkipIntro = () => {
     sendCommand({ type: 'autoskip', on: true });
   };
 
-  const handleSeekDelta = (seconds: number) => {
+  const handleSeekDelta = useCallback((seconds: number) => {
     if (!supportsRemoteControls) return;
 
     pendingSeekRef.current = seconds;
@@ -182,7 +175,40 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
         sendCommand({ type: 'seek', time: targetTime });
       }
     }, 250);
-  };
+  }, [sendCommand]);
+
+  // Keyboard shortcuts:
+  // - Press 'P' or 'p' to Pause/Play video
+  // - Press Right Arrow (ArrowRight) to Seek +10s
+  // - Press Left Arrow (ArrowLeft) to Seek -10s
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore shortcut when user is typing inside an input field or search bar
+      const target = e.target as HTMLElement;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (e.key === 'p' || e.key === 'P') {
+        e.preventDefault();
+        togglePlay();
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        handleSeekDelta(10);
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        handleSeekDelta(-10);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [togglePlay, handleSeekDelta]);
 
   const handleJumpToTime = (e: React.FormEvent) => {
     e.preventDefault();
@@ -232,7 +258,7 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
           </span>
         </div>
 
-        {/* Upper Area Panel Controls: Episode Navigation & Quality Badge */}
+        {/* Upper Area Panel Controls: Episode Navigation */}
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap sm:flex-nowrap shrink-0">
           {(onPrevEpisode || onNextEpisode) && (
             <div className="flex items-center gap-1.5 bg-slate-800/80 p-1 rounded-lg border border-slate-700">
@@ -282,7 +308,7 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
             ) : (
               <>
                 <ShieldCheck className="size-4 text-teal-400" />
-                <span>Remote Engine Active • Quality: {quality === 'auto' ? 'AUTO' : quality}</span>
+                <span>Remote Engine Active • Native Controls Enabled</span>
               </>
             )}
           </div>
@@ -292,7 +318,7 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
       {/* Main Player Container */}
       <div
         ref={containerRef}
-        className="relative w-full aspect-video bg-black rounded-xl overflow-hidden shadow-2xl border border-slate-800 group"
+        className="relative w-full aspect-video max-h-[66vh] bg-black rounded-xl overflow-hidden shadow-2xl border border-slate-800 group mx-auto"
       >
         {isServerDown ? (
           <div className="absolute inset-0 z-30 bg-slate-950/95 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center border border-slate-800">
@@ -329,7 +355,7 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
         ) : (
           <iframe
             ref={iframeRef}
-            key={`${embedUrl}-${retryKey}`}
+            key={`${source}-${animeId}-${episode}-${track}-${retryKey}`}
             src={embedUrl}
             title={`Streaming Episode ${episode}`}
             className="w-full h-full border-0"
@@ -349,6 +375,18 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
             title="Click to start video with full native controls"
           />
         )}
+
+        {/* Floating Mobile/Touch Exit Fullscreen Button */}
+        {isFullscreen && (
+          <button
+            onClick={handleFullscreen}
+            className="absolute top-4 right-4 z-50 bg-slate-950/40 hover:bg-slate-950/90 text-slate-300 hover:text-slate-100 px-3 py-1.5 rounded-xl border border-slate-700/40 hover:border-slate-600/80 backdrop-blur-sm shadow-lg opacity-60 hover:opacity-100 transition-all duration-300 cursor-pointer flex items-center gap-1.5 text-xs font-semibold active:scale-95 group/exit"
+            title="Exit Fullscreen Mode"
+          >
+            <Minimize className="size-3.5 text-teal-400/70 group-hover/exit:text-teal-400 group-hover/exit:scale-110 transition" />
+            <span className="text-slate-300 group-hover/exit:text-white transition-colors">Exit Fullscreen</span>
+          </button>
+        )}
       </div>
 
       {/* Custom Remote Control Deck */}
@@ -358,6 +396,7 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
           <button
             onClick={togglePlay}
             disabled={!supportsRemoteControls}
+            title="Pause/Play Video (Shortcut: P)"
             className="bg-teal-500 hover:bg-teal-400 disabled:opacity-40 text-slate-950 font-black px-4 py-2 rounded-lg flex items-center gap-2 text-xs transition shadow-md shadow-teal-500/20 cursor-pointer"
           >
             {isPlaying ? <Pause className="size-4 fill-slate-950" /> : <Play className="size-4 fill-slate-950" />}
@@ -368,7 +407,7 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
             onClick={() => handleSeekDelta(-10)}
             disabled={!supportsRemoteControls}
             className="bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 p-2 rounded-lg text-xs font-semibold flex items-center gap-1 border border-slate-700 transition cursor-pointer"
-            title="Rewind 10s"
+            title="Rewind 10s (Shortcut: Left Arrow)"
           >
             <RotateCcw className="size-4" /> -10s
           </button>
@@ -377,7 +416,7 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
             onClick={() => handleSeekDelta(10)}
             disabled={!supportsRemoteControls}
             className="bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 p-2 rounded-lg text-xs font-semibold flex items-center gap-1 border border-slate-700 transition cursor-pointer"
-            title="Forward 10s"
+            title="Forward 10s (Shortcut: Right Arrow)"
           >
             <RotateCw className="size-4" /> +10s
           </button>
@@ -424,30 +463,8 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
           )}
         </div>
 
-        {/* Secondary Options: Quality, Provider, Track, Skin Color & Fullscreen */}
+        {/* Secondary Options: Provider, Track, Skin Color & Fullscreen */}
         <div className="flex flex-wrap items-center gap-3 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-slate-400 uppercase flex items-center gap-1">
-              <Sliders className="size-3.5 text-teal-400" />
-              Quality:
-            </span>
-            <div className="flex bg-slate-800 p-1 rounded-lg border border-slate-700">
-              {(['1080p', '720p', '480p', '360p', 'auto'] as const).map((q) => (
-                <button
-                  key={q}
-                  onClick={() => handleQualityChange(q)}
-                  className={`px-2 py-1 text-xs font-extrabold rounded uppercase transition cursor-pointer ${
-                    quality === q
-                      ? 'bg-teal-500 text-slate-950 shadow-md shadow-teal-500/20'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  {q === 'auto' ? 'Auto' : q}
-                </button>
-              ))}
-            </div>
-          </div>
-
           {onSourceChange && (
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold text-slate-400 uppercase">Provider:</span>
