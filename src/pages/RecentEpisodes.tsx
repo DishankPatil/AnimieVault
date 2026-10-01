@@ -60,7 +60,7 @@ export const RecentEpisodes: React.FC = () => {
             <span>Latest Anime Release Feed</span>
           </div>
           <h1 className="text-3xl font-black text-slate-100 tracking-tight">
-            Recently Added Episodes
+            Latest Episodes
           </h1>
           <p className="text-slate-400 text-sm mt-1 max-w-2xl">
             Stay updated with fresh anime episode releases. Click any episode card to start watching instantly.
@@ -81,7 +81,7 @@ export const RecentEpisodes: React.FC = () => {
       {loading && (
         <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-3">
           <Loader2 className="size-8 animate-spin text-teal-400" />
-          <p className="text-sm font-medium">Fetching recently added episodes...</p>
+          <p className="text-sm font-medium">Fetching latest episodes...</p>
         </div>
       )}
 

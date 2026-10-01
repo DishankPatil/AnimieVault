@@ -4,6 +4,7 @@ import { Analytics } from '@vercel/analytics/react';
 import { Navbar } from './components/Navbar';
 import { Home } from './pages/Home';
 import { RecentEpisodes } from './pages/RecentEpisodes';
+import { ReleaseSchedule } from './pages/ReleaseSchedule';
 import { AnimeDetails } from './pages/AnimeDetails';
 import { Watch } from './pages/Watch';
 import { MyLibrary } from './pages/MyLibrary';
@@ -21,7 +22,9 @@ export const App: React.FC = () => {
         <main className="flex-1">
           <Routes>
             <Route path="/" element={<Home />} />
+            <Route path="/latest" element={<RecentEpisodes />} />
             <Route path="/recent" element={<RecentEpisodes />} />
+            <Route path="/schedule" element={<ReleaseSchedule />} />
             <Route path="/library" element={<MyLibrary />} />
             <Route path="/anime/:id" element={<AnimeDetails />} />
             <Route path="/watch/:id/:episode" element={<Watch />} />

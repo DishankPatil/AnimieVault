@@ -38,7 +38,7 @@ export const EpisodeCard: React.FC<EpisodeCardProps> = ({ episode }) => {
           src={episode.coverImage.large || episode.coverImage.medium || episode.coverImage.extraLarge}
           alt={title}
           onError={(e) => {
-            (e.target as HTMLImageElement).src = 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx176500-TaqS5WJ1v8nC.jpg';
+            (e.target as HTMLImageElement).src = 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21-ELSYx3yMPcKM.jpg';
           }}
           className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
           loading="lazy"

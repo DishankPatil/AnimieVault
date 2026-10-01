@@ -37,7 +37,7 @@ export const CatalogCard: React.FC<CatalogCardProps> = ({ anime }) => {
           src={anime.coverImage.large || anime.coverImage.medium || anime.coverImage.extraLarge}
           alt={title}
           onError={(e) => {
-            (e.target as HTMLImageElement).src = 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx176500-TaqS5WJ1v8nC.jpg';
+            (e.target as HTMLImageElement).src = 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21-ELSYx3yMPcKM.jpg';
           }}
           className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
           loading="lazy"

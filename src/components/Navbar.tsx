@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { Search, Tv, Zap, Loader2, Star, ChevronRight, Heart, X, Home } from 'lucide-react';
+import { Search, Tv, Zap, Loader2, Star, ChevronRight, Heart, X, Home, Calendar } from 'lucide-react';
 import { searchAnime } from '../services/anilist';
 import type { Anime } from '../services/anilist';
 import { getWatchlist, getWatchHistory } from '../utils/preferences';
@@ -107,7 +107,8 @@ export const Navbar: React.FC = () => {
   };
 
   const isHome = location.pathname === '/' && !location.search.includes('filter=recent');
-  const isRecent = location.pathname === '/recent' || location.search.includes('filter=recent');
+  const isRecent = location.pathname === '/recent' || location.pathname === '/latest' || location.search.includes('filter=recent');
+  const isSchedule = location.pathname === '/schedule';
   const isLibrary = location.pathname === '/library';
 
   return (
@@ -265,7 +266,7 @@ export const Navbar: React.FC = () => {
           </Link>
 
           <Link
-            to="/recent"
+            to="/latest"
             className={`transition flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg relative ${
               isRecent
                 ? 'text-teal-400 bg-teal-500/10 border border-teal-500/20 font-semibold'
@@ -273,8 +274,21 @@ export const Navbar: React.FC = () => {
             }`}
           >
             <Zap className="size-4 text-amber-400 animate-pulse fill-amber-400" />
-            <span className="hidden sm:inline">Recent Episodes</span>
-            <span className="sm:hidden">Recent</span>
+            <span className="hidden sm:inline">Latest Episodes</span>
+            <span className="sm:hidden">Latest</span>
+          </Link>
+
+          <Link
+            to="/schedule"
+            className={`transition flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg relative ${
+              isSchedule
+                ? 'text-teal-400 bg-teal-500/10 border border-teal-500/20 font-semibold'
+                : 'text-slate-300 hover:text-teal-400 hover:bg-slate-800/60'
+            }`}
+          >
+            <Calendar className="size-4 text-teal-400" />
+            <span className="hidden sm:inline">Schedule</span>
+            <span className="sm:hidden">Schedule</span>
           </Link>
 
           <Link

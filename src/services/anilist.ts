@@ -80,6 +80,7 @@ export interface RecentEpisode {
   format?: string | null;
   genres?: string[];
   averageScore?: number | null;
+  status?: string | null;
 }
 
 const ANILIST_GRAPHQL_URL = 'https://graphql.anilist.co';
@@ -694,6 +695,263 @@ export async function fetchRecentEpisodes(page: number = 1, perPage: number = 20
   return {
     episodes: sliced.length > 0 ? sliced : FALLBACK_RECENT_EPISODES,
     hasNextPage: start + perPage < FALLBACK_RECENT_EPISODES.length
+  };
+}
+
+const FALLBACK_SCHEDULED_EPISODES: RecentEpisode[] = [
+  {
+    id: 201,
+    animeId: 21,
+    idMal: 21,
+    episode: 1123,
+    airingAt: Math.floor(Date.now() / 1000) + 7200,
+    title: { romaji: 'ONE PIECE', english: 'One Piece' },
+    coverImage: {
+      extraLarge: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21-ELSYx3yMPcKM.jpg',
+      large: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21-ELSYx3yMPcKM.jpg'
+    },
+    format: 'TV',
+    genres: ['Action', 'Adventure', 'Fantasy'],
+    averageScore: 89,
+    status: 'RELEASING'
+  },
+  {
+    id: 202,
+    animeId: 163130,
+    idMal: 54112,
+    episode: 2,
+    airingAt: Math.floor(Date.now() / 1000) + 21600,
+    title: { romaji: 'Re:Zero kara Hajimeru Isekai Seikatsu 3rd Season', english: 'Re:ZERO -Starting Life in Another World- Season 3' },
+    coverImage: {
+      extraLarge: 'https://s4.anilist.co/file/anilistcdn/media/manga/cover/large/bx163130-85rgV2rPbumc.jpg',
+      large: 'https://s4.anilist.co/file/anilistcdn/media/manga/cover/large/bx163130-85rgV2rPbumc.jpg'
+    },
+    format: 'TV',
+    genres: ['Action', 'Adventure', 'Drama', 'Fantasy'],
+    averageScore: 87,
+    status: 'RELEASING'
+  },
+  {
+    id: 203,
+    animeId: 167243,
+    idMal: 56108,
+    episode: 2,
+    airingAt: Math.floor(Date.now() / 1000) + 86400,
+    title: { romaji: 'BLEACH: Sennen Kessen-hen - Soukoku-tan', english: 'Bleach: Thousand-Year Blood War - The Conflict' },
+    coverImage: {
+      extraLarge: 'https://s4.anilist.co/file/anilistcdn/media/manga/cover/large/bx167243-9NTqeOM9kVcN.jpg',
+      large: 'https://s4.anilist.co/file/anilistcdn/media/manga/cover/large/bx167243-9NTqeOM9kVcN.jpg'
+    },
+    format: 'TV',
+    genres: ['Action', 'Adventure', 'Supernatural'],
+    averageScore: 88,
+    status: 'RELEASING'
+  },
+  {
+    id: 204,
+    animeId: 174626,
+    idMal: 58082,
+    episode: 2,
+    airingAt: Math.floor(Date.now() / 1000) + 172800,
+    title: { romaji: 'Shangri-La Frontier 2nd Season', english: 'Shangri-La Frontier Season 2' },
+    coverImage: {
+      extraLarge: 'https://s4.anilist.co/file/anilistcdn/media/manga/cover/large/bx174626-d1q7KJdciwaW.jpg',
+      large: 'https://s4.anilist.co/file/anilistcdn/media/manga/cover/large/bx174626-d1q7KJdciwaW.jpg'
+    },
+    format: 'TV',
+    genres: ['Action', 'Adventure', 'Sci-Fi'],
+    averageScore: 83,
+    status: 'RELEASING'
+  },
+  {
+    id: 205,
+    animeId: 164082,
+    idMal: 54865,
+    episode: 15,
+    airingAt: Math.floor(Date.now() / 1000) + 259200,
+    title: { romaji: 'BLUE LOCK vs. U-20 JAPAN', english: 'BLUE LOCK Season 2' },
+    coverImage: {
+      extraLarge: 'https://s4.anilist.co/file/anilistcdn/media/manga/cover/large/bx164082-Q6p1Te8pck2o.jpg',
+      large: 'https://s4.anilist.co/file/anilistcdn/media/manga/cover/large/bx164082-Q6p1Te8pck2o.jpg'
+    },
+    format: 'TV',
+    genres: ['Sports'],
+    averageScore: 81,
+    status: 'RELEASING'
+  },
+  {
+    id: 206,
+    animeId: 170942,
+    idMal: 57242,
+    episode: 1,
+    airingAt: Math.floor(Date.now() / 1000) + 345600,
+    title: { romaji: 'Dragon Ball DAIMA', english: 'Dragon Ball DAIMA' },
+    coverImage: {
+      extraLarge: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx170942-KKcLfQzV57nG.jpg',
+      large: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx170942-KKcLfQzV57nG.jpg'
+    },
+    format: 'TV',
+    genres: ['Action', 'Adventure', 'Fantasy'],
+    averageScore: 82,
+    status: 'RELEASING'
+  },
+  {
+    id: 207,
+    animeId: 235,
+    idMal: 235,
+    episode: 1138,
+    airingAt: Math.floor(Date.now() / 1000) + 432000,
+    title: { romaji: 'Meitantei Conan', english: 'Detective Conan' },
+    coverImage: {
+      extraLarge: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx235-MyYT7K3chBdO.jpg',
+      large: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx235-MyYT7K3chBdO.jpg'
+    },
+    format: 'TV',
+    genres: ['Adventure', 'Comedy', 'Mystery'],
+    averageScore: 82,
+    status: 'RELEASING'
+  },
+  {
+    id: 208,
+    animeId: 178762,
+    idMal: 59178,
+    episode: 2,
+    airingAt: Math.floor(Date.now() / 1000) + 518400,
+    title: { romaji: 'Ranma 1/2 (2024)', english: 'Ranma 1/2 (2024)' },
+    coverImage: {
+      extraLarge: 'https://s4.anilist.co/file/anilistcdn/media/manga/cover/large/bx178762-Ng0FcPBUjg2q.jpg',
+      large: 'https://s4.anilist.co/file/anilistcdn/media/manga/cover/large/bx178762-Ng0FcPBUjg2q.jpg'
+    },
+    format: 'TV',
+    genres: ['Action', 'Comedy', 'Romance'],
+    averageScore: 80,
+    status: 'RELEASING'
+  },
+  {
+    id: 209,
+    animeId: 195604,
+    idMal: 61967,
+    episode: 1,
+    airingAt: Math.floor(Date.now() / 1000) + (2 * 86400) + 3600,
+    title: { romaji: 'Black Clover 2nd Season', english: 'Black Clover Season 2' },
+    coverImage: {
+      extraLarge: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx195604-tSZcfKbVqSEG.jpg',
+      large: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx195604-tSZcfKbVqSEG.jpg'
+    },
+    format: 'TV',
+    genres: ['Action', 'Comedy', 'Fantasy'],
+    averageScore: 84,
+    status: 'NOT_YET_RELEASED'
+  }
+];
+
+export async function fetchUpcomingSchedule(page: number = 1, perPage: number = 50, daysAhead: number = 7): Promise<{ episodes: RecentEpisode[]; hasNextPage: boolean }> {
+  const cacheKey = `schedule_v6_${page}_${perPage}_${daysAhead}`;
+  const cached = getCachedData<{ episodes: RecentEpisode[]; hasNextPage: boolean }>(cacheKey);
+  if (cached) return cached;
+
+  const now = Math.floor(Date.now() / 1000);
+  const end = now + (daysAhead * 86400);
+
+  const query = `
+    query ($page: Int, $perPage: Int, $airingAt_greater: Int, $airingAt_lesser: Int) {
+      Page (page: $page, perPage: $perPage) {
+        pageInfo {
+          hasNextPage
+        }
+        airingSchedules (airingAt_greater: $airingAt_greater, airingAt_lesser: $airingAt_lesser, sort: TIME_ASC) {
+          id
+          airingAt
+          episode
+          media {
+            id
+            idMal
+            title {
+              romaji
+              english
+            }
+            coverImage {
+              extraLarge
+              large
+              medium
+            }
+            bannerImage
+            format
+            genres
+            averageScore
+            status
+          }
+        }
+      }
+    }
+  `;
+
+  try {
+    const response = await fetchWithTimeout(ANILIST_GRAPHQL_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        query,
+        variables: {
+          page,
+          perPage,
+          airingAt_greater: now,
+          airingAt_lesser: end
+        }
+      })
+    }, 4000);
+
+    const json = await response.json();
+    const rawSchedules = json.data?.Page?.airingSchedules;
+
+    if (rawSchedules && Array.isArray(rawSchedules) && rawSchedules.length > 0) {
+      // Filter out finished anime, allowing active releasing and upcoming new season premieres (NOT_YET_RELEASED)
+      const ongoingSchedules = rawSchedules.filter((item: any) => 
+        !item.media?.status || item.media.status === 'RELEASING' || item.media.status === 'NOT_YET_RELEASED'
+      );
+
+      const episodes: RecentEpisode[] = ongoingSchedules.map((item: any) => ({
+        id: item.id,
+        animeId: item.media.id,
+        idMal: item.media.idMal,
+        episode: item.episode,
+        airingAt: item.airingAt,
+        title: {
+          romaji: item.media.title.romaji,
+          english: item.media.title.english
+        },
+        coverImage: {
+          extraLarge: item.media.coverImage.extraLarge || item.media.coverImage.large,
+          large: item.media.coverImage.large || item.media.coverImage.medium,
+          medium: item.media.coverImage.medium
+        },
+        bannerImage: item.media.bannerImage,
+        format: item.media.format,
+        genres: item.media.genres,
+        averageScore: item.media.averageScore,
+        status: item.media.status
+      }));
+
+      const result = {
+        episodes,
+        hasNextPage: json.data?.Page?.pageInfo?.hasNextPage || false
+      };
+      setCachedData(cacheKey, result);
+      return result;
+    }
+  } catch (e) {
+    console.warn('AniList live schedule API failed or unreachable, serving fallback schedule.', e);
+  }
+
+  const start = (page - 1) * perPage;
+  const sliced = FALLBACK_SCHEDULED_EPISODES.slice(start, start + perPage);
+
+  return {
+    episodes: sliced.length > 0 ? sliced : FALLBACK_SCHEDULED_EPISODES,
+    hasNextPage: start + perPage < FALLBACK_SCHEDULED_EPISODES.length
   };
 }
 
