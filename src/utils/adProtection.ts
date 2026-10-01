@@ -1,14 +1,6 @@
 // Global Ad-Shield & Anti-Redirect Protection Utility (Non-Sandbox Compatible Methods)
 
 let isInitialized = false;
-let isInternalNavigation = false;
-
-export function markInternalNavigation(): void {
-  isInternalNavigation = true;
-  setTimeout(() => {
-    isInternalNavigation = false;
-  }, 1000);
-}
 
 export function initAdProtection(): void {
   if (isInitialized || typeof window === 'undefined') return;
@@ -35,16 +27,7 @@ export function initAdProtection(): void {
     return originalOpen.call(window, url, target, features);
   };
 
-  // 2. Prevent top-frame redirects from embedded scripts
-  window.addEventListener('beforeunload', (e) => {
-    if (!isInternalNavigation) {
-      e.preventDefault();
-      e.returnValue = 'Are you sure you want to leave? An embedded player is attempting to redirect your browser.';
-      return e.returnValue;
-    }
-  });
-
-  // 3. Prevent focus hijacking when iframe attempts tab switching
+  // 2. Prevent focus hijacking when iframe attempts tab switching
   window.addEventListener('blur', () => {
     if (document.activeElement?.tagName === 'IFRAME') {
       // Re-focus current window to mitigate background popunder tab traps
@@ -53,16 +36,5 @@ export function initAdProtection(): void {
       }, 50);
     }
   });
-
-  // 4. Flag internal link clicks for legitimate user router transitions
-  document.addEventListener(
-    'click',
-    (e) => {
-      const target = e.target as HTMLElement | null;
-      if (target?.closest('a') || target?.closest('button')) {
-        markInternalNavigation();
-      }
-    },
-    true
-  );
 }
+
