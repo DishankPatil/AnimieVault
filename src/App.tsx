@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { Analytics } from '@vercel/analytics/react';
 import { Navbar } from './components/Navbar';
 import { Home } from './pages/Home';
@@ -8,6 +8,11 @@ import { AnimeDetails } from './pages/AnimeDetails';
 import { Watch } from './pages/Watch';
 import { MyLibrary } from './pages/MyLibrary';
 import { initAdProtection } from './utils/adProtection';
+
+const WatchRedirect: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
+  return <Navigate to={`/watch/${id}/1`} replace />;
+};
 
 export const App: React.FC = () => {
   useEffect(() => {
@@ -25,7 +30,9 @@ export const App: React.FC = () => {
             <Route path="/recent" element={<RecentEpisodes />} />
             <Route path="/library" element={<MyLibrary />} />
             <Route path="/anime/:id" element={<AnimeDetails />} />
+            <Route path="/watch/:id" element={<WatchRedirect />} />
             <Route path="/watch/:id/:episode" element={<Watch />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
         <footer className="border-t border-slate-900 bg-slate-950 py-8 text-center text-xs text-slate-500">

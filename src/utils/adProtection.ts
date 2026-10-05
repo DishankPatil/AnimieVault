@@ -27,14 +27,6 @@ export function initAdProtection(): void {
     return originalOpen.call(window, url, target, features);
   };
 
-  // 2. Prevent focus hijacking when iframe attempts tab switching
-  window.addEventListener('blur', () => {
-    if (document.activeElement?.tagName === 'IFRAME') {
-      // Re-focus current window to mitigate background popunder tab traps
-      setTimeout(() => {
-        window.focus();
-      }, 50);
-    }
-  });
+  // Third-party popup blocking active.
 }
 

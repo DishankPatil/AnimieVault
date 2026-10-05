@@ -64,7 +64,7 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
 
   // Server health state
   const [isServerDown, setIsServerDown] = useState<boolean>(false);
-  const [isCheckingServer, setIsCheckingServer] = useState<boolean>(true);
+  const [isCheckingServer, setIsCheckingServer] = useState<boolean>(false);
   const [retryKey, setRetryKey] = useState<number>(0);
 
   // Invisible 1-time click absorber state to disarm initial clickjacking overlays without obscuring video quality
@@ -83,8 +83,6 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
   // Ping server health whenever source/animeId/episode/track/retryKey changes
   useEffect(() => {
     let isMounted = true;
-    setIsCheckingServer(true);
-    setIsServerDown(false);
 
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => {
@@ -96,14 +94,13 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
         window.clearTimeout(timeoutId);
         if (isMounted) {
           setIsCheckingServer(false);
-          setIsServerDown(false);
         }
       })
       .catch(() => {
         window.clearTimeout(timeoutId);
         if (isMounted) {
           setIsCheckingServer(false);
-          setIsServerDown(true);
+          // Don't force server down solely on background ping failure (adblockers block no-cors fetches)
         }
       });
 

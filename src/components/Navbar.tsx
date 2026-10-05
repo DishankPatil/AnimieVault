@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { Search, Tv, Zap, Loader2, Star, ChevronRight, Heart, X, Home } from 'lucide-react';
-import { searchAnime } from '../services/anilist';
+import { searchAnime, PLACEHOLDER_COVER } from '../services/anilist';
 import type { Anime } from '../services/anilist';
 import { getWatchlist, getWatchHistory } from '../utils/preferences';
 
@@ -32,26 +32,37 @@ export const Navbar: React.FC = () => {
     };
   }, []);
 
-  // Debounced live suggestion fetcher
+  // Debounced live suggestion fetcher with race-condition protection
   useEffect(() => {
     const trimmed = searchTerm.trim();
     if (trimmed.length < 1) return;
+
+    let isCurrent = true;
 
     const timer = setTimeout(async () => {
       setIsSearching(true);
       setShowDropdown(true);
       try {
         const result = await searchAnime(trimmed, 1, 15);
-        setSuggestions(result.media);
-        setSelectedIndex(-1);
+        if (isCurrent) {
+          setSuggestions(result.media);
+          setSelectedIndex(-1);
+        }
       } catch {
-        setSuggestions([]);
+        if (isCurrent) {
+          setSuggestions([]);
+        }
       } finally {
-        setIsSearching(false);
+        if (isCurrent) {
+          setIsSearching(false);
+        }
       }
     }, 200);
 
-    return () => clearTimeout(timer);
+    return () => {
+      isCurrent = false;
+      clearTimeout(timer);
+    };
   }, [searchTerm]);
 
   // Close dropdown on click outside
@@ -198,7 +209,7 @@ export const Navbar: React.FC = () => {
                             src={anime.coverImage.medium || anime.coverImage.large}
                             alt={mainTitle}
                             onError={(e) => {
-                              (e.target as HTMLImageElement).src = 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx176500-TaqS5WJ1v8nC.jpg';
+                              (e.target as HTMLImageElement).src = PLACEHOLDER_COVER;
                             }}
                             className="w-11 h-16 object-cover rounded-md shrink-0 bg-slate-950 border border-slate-800"
                           />

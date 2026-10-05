@@ -1,3 +1,7 @@
+import { getWatchHistory, getWatchlist } from '../utils/preferences';
+
+export const PLACEHOLDER_COVER = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="300" height="450" viewBox="0 0 300 450"><rect width="300" height="450" fill="%230f172a"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%230d9488" font-family="sans-serif" font-size="20" font-weight="bold">AnimeVault</text></svg>';
+
 export interface AnimeRelation {
   id: number;
   idMal: number | null;
@@ -139,8 +143,18 @@ export function getEffectiveTotalEpisodes(anime: Anime | null | undefined): numb
 
   // Fallbacks for active releasing anime missing nextAiringEpisode schedule
   if (anime.status === 'RELEASING') {
-    if (anime.id === 21 || anime.idMal === 21) return 1180; // One Piece
-    if (anime.id === 235 || anime.idMal === 235) return 1214; // Detective Conan
+    if (anime.startDate && typeof anime.startDate === 'object' && anime.startDate.year) {
+      const startYear = anime.startDate.year;
+      const startMonth = (anime.startDate.month || 1) - 1;
+      const startDay = anime.startDate.day || 1;
+      const startMs = new Date(startYear, startMonth, startDay).getTime();
+      const weeksElapsed = Math.floor((Date.now() - startMs) / (7 * 24 * 60 * 60 * 1000));
+      if (weeksElapsed > 0) {
+        return Math.max(weeksElapsed, anime.id === 21 || anime.idMal === 21 ? 1130 : 24);
+      }
+    }
+    if (anime.id === 21 || anime.idMal === 21) return 1200; // One Piece
+    if (anime.id === 235 || anime.idMal === 235) return 1250; // Detective Conan
     return 50;
   }
 
@@ -955,23 +969,37 @@ export async function fetchUpcomingSchedule(page: number = 1, perPage: number = 
   };
 }
 
-export async function fetchTrendingAnime(page: number = 1, perPage: number = 20): Promise<{ media: Anime[]; hasNextPage: boolean }> {
-  const cacheKey = `trending_${page}_${perPage}`;
+export async function fetchTrendingAnime(page: number = 1, perPage: number = 20, genre?: string): Promise<{ media: Anime[]; hasNextPage: boolean }> {
+  const activeGenre = genre && genre !== 'All' ? genre : undefined;
+  const cacheKey = `trending_${page}_${perPage}_${activeGenre || 'all'}`;
   const cached = getCachedData<{ media: Anime[]; hasNextPage: boolean }>(cacheKey);
   if (cached) return cached;
 
-  const query = `
-    query ($page: Int, $perPage: Int) {
-      Page (page: $page, perPage: $perPage) {
-        pageInfo {
-          hasNextPage
-        }
-        media (sort: TRENDING_DESC, type: ANIME, isAdult: false) {
-          ${ANIME_FIELDS}
+  const query = activeGenre
+    ? `
+      query ($page: Int, $perPage: Int, $genre: String) {
+        Page (page: $page, perPage: $perPage) {
+          pageInfo {
+            hasNextPage
+          }
+          media (genre: $genre, sort: TRENDING_DESC, type: ANIME, isAdult: false) {
+            ${ANIME_FIELDS}
+          }
         }
       }
-    }
-  `;
+    `
+    : `
+      query ($page: Int, $perPage: Int) {
+        Page (page: $page, perPage: $perPage) {
+          pageInfo {
+            hasNextPage
+          }
+          media (sort: TRENDING_DESC, type: ANIME, isAdult: false) {
+            ${ANIME_FIELDS}
+          }
+        }
+      }
+    `;
 
   try {
     const response = await fetchWithTimeout(ANILIST_GRAPHQL_URL, {
@@ -982,7 +1010,7 @@ export async function fetchTrendingAnime(page: number = 1, perPage: number = 20)
       },
       body: JSON.stringify({
         query,
-        variables: { page, perPage }
+        variables: activeGenre ? { page, perPage, genre: activeGenre } : { page, perPage }
       })
     }, 3500);
 
@@ -1024,10 +1052,14 @@ export async function fetchTrendingAnime(page: number = 1, perPage: number = 20)
     format: ep.format || 'TV'
   }));
 
-  const start = (page - 1) * perPage;
-  const sliced = fallbackMedia.slice(start, start + perPage);
+  const filteredFallback = activeGenre
+    ? fallbackMedia.filter(a => (a.genres || []).some(g => g.toLowerCase() === activeGenre.toLowerCase()))
+    : fallbackMedia;
 
-  return { media: sliced.length > 0 ? sliced : fallbackMedia, hasNextPage: start + perPage < fallbackMedia.length };
+  const start = (page - 1) * perPage;
+  const sliced = filteredFallback.slice(start, start + perPage);
+
+  return { media: sliced.length > 0 ? sliced : filteredFallback, hasNextPage: start + perPage < filteredFallback.length };
 }
 
 export async function fetchOngoingAndTrendingAnime(perPage: number = 8): Promise<Anime[]> {
@@ -1377,13 +1409,65 @@ export async function fetchAnimeDetails(id: number): Promise<Anime | null> {
     console.warn('fetchAnimeDetails AniList GraphQL failed', e);
   }
 
-  // Fallback single anime object from local list if offline
-  const ep = FALLBACK_RECENT_EPISODES.find(e => e.animeId === id) || FALLBACK_RECENT_EPISODES[0];
-  const targetId = ep ? ep.animeId : id;
+  // Fallback single anime object from local list, watch history, or watchlist if offline
+  const ep = FALLBACK_RECENT_EPISODES.find(e => e.animeId === id);
+  let titleRomaji = `Anime #${id}`;
+  let titleEnglish: string | null = null;
+  let coverExtraLarge = PLACEHOLDER_COVER;
+  let coverLarge = PLACEHOLDER_COVER;
+  let coverMedium = PLACEHOLDER_COVER;
+  let bannerImage: string | null = null;
+  let idMal: number | null = null;
+  let format: string = 'TV';
+  let episodes: number = 24;
+  let genres: string[] = ['Action', 'Fantasy'];
+  let averageScore: number = 85;
+
+  if (ep) {
+    titleRomaji = ep.title.romaji;
+    titleEnglish = ep.title.english;
+    coverExtraLarge = ep.coverImage.extraLarge;
+    coverLarge = ep.coverImage.large;
+    coverMedium = ep.coverImage.medium || ep.coverImage.large;
+    bannerImage = ep.bannerImage || null;
+    idMal = ep.idMal || null;
+    format = ep.format || 'TV';
+    episodes = ep.episode || 24;
+    genres = ep.genres || ['Action', 'Fantasy'];
+    averageScore = ep.averageScore || 85;
+  } else {
+    // Check local watch history or watchlist
+    try {
+      const history = getWatchHistory();
+      const histItem = history.find(h => h.animeId === id);
+      if (histItem) {
+        titleRomaji = histItem.title;
+        titleEnglish = histItem.title;
+        coverExtraLarge = histItem.coverImage;
+        coverLarge = histItem.coverImage;
+        coverMedium = histItem.coverImage;
+        if (histItem.totalEpisodes) episodes = histItem.totalEpisodes;
+      } else {
+        const watchlist = getWatchlist();
+        const watchItem = watchlist.find(w => w.id === id);
+        if (watchItem) {
+          titleRomaji = watchItem.title;
+          titleEnglish = watchItem.title;
+          coverExtraLarge = watchItem.coverImage;
+          coverLarge = watchItem.coverImage;
+          coverMedium = watchItem.coverImage;
+          if (watchItem.format) format = watchItem.format;
+          if (watchItem.averageScore) averageScore = watchItem.averageScore;
+        }
+      }
+    } catch {
+      // Ignore localStorage errors
+    }
+  }
 
   // Curated Fallback Relations for common shows
   const fallbackRelations: AnimeRelation[] = [];
-  if (targetId === 176500) {
+  if (id === 176500) {
     // Solo Leveling S2 -> S1
     fallbackRelations.push({
       id: 151807,
@@ -1398,7 +1482,7 @@ export async function fetchAnimeDetails(id: number): Promise<Anime | null> {
       status: 'FINISHED',
       averageScore: 85
     });
-  } else if (targetId === 145064) {
+  } else if (id === 145064) {
     // Jujutsu Kaisen S2 -> S1 & Movie
     fallbackRelations.push(
       {
@@ -1428,7 +1512,7 @@ export async function fetchAnimeDetails(id: number): Promise<Anime | null> {
         averageScore: 84
       }
     );
-  } else if (targetId === 166531) {
+  } else if (id === 166531) {
     // Oshi No Ko S2 -> S1
     fallbackRelations.push({
       id: 150672,
@@ -1446,27 +1530,27 @@ export async function fetchAnimeDetails(id: number): Promise<Anime | null> {
   }
 
   return {
-    id: targetId,
-    idMal: ep ? ep.idMal || null : null,
+    id: id,
+    idMal: idMal,
     title: {
-      romaji: ep ? ep.title.romaji : 'Anime Details',
-      english: ep ? ep.title.english : 'Anime Details',
+      romaji: titleRomaji,
+      english: titleEnglish,
       native: null
     },
     coverImage: {
-      extraLarge: ep ? ep.coverImage.extraLarge : 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx176500-TaqS5WJ1v8nC.jpg',
-      large: ep ? ep.coverImage.large : 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx176500-TaqS5WJ1v8nC.jpg',
-      medium: ep ? ep.coverImage.medium || ep.coverImage.large : 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx176500-TaqS5WJ1v8nC.jpg',
+      extraLarge: coverExtraLarge,
+      large: coverLarge,
+      medium: coverMedium,
       color: '#14b8a6'
     },
-    bannerImage: ep ? ep.bannerImage || null : null,
-    description: `Stream all episodes of ${ep ? ep.title.english || ep.title.romaji : 'this anime'} in high quality on AnimeVault.`,
-    episodes: 24,
-    genres: ep ? ep.genres || ['Action', 'Fantasy'] : ['Action', 'Fantasy'],
-    averageScore: ep ? ep.averageScore || 85 : 85,
+    bannerImage: bannerImage,
+    description: `Stream all episodes of ${titleEnglish || titleRomaji} in high quality on AnimeVault.`,
+    episodes: episodes,
+    genres: genres,
+    averageScore: averageScore,
     status: 'RELEASING',
     seasonYear: 2024,
-    format: ep ? ep.format || 'TV' : 'TV',
+    format: format,
     relations: fallbackRelations
   };
 }

@@ -43,6 +43,9 @@ export const Home: React.FC = () => {
     };
   }, []);
 
+  const [selectedGenre, setSelectedGenre] = useState<string>('All');
+  const genres = ['All', 'Action', 'Adventure', 'Comedy', 'Fantasy', 'Sci-Fi', 'Romance', 'Sports', 'Drama'];
+
   useEffect(() => {
     let isMounted = true;
 
@@ -58,7 +61,7 @@ export const Home: React.FC = () => {
             setHasNextPage(result.hasNextPage);
           }
         } else {
-          const result = await fetchTrendingAnime(1, 20);
+          const result = await fetchTrendingAnime(1, 20, selectedGenre);
           if (isMounted) {
             setAnimeList(result.media);
             setPage(1);
@@ -80,7 +83,7 @@ export const Home: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [query]);
+  }, [query, selectedGenre]);
 
   const handleLoadMore = async () => {
     if (loadingMore || !hasNextPage) return;
@@ -94,7 +97,7 @@ export const Home: React.FC = () => {
         setPage(nextPage);
         setHasNextPage(result.hasNextPage);
       } else {
-        const result = await fetchTrendingAnime(nextPage, 20);
+        const result = await fetchTrendingAnime(nextPage, 20, selectedGenre);
         setAnimeList((prev) => [...prev, ...result.media]);
         setPage(nextPage);
         setHasNextPage(result.hasNextPage);
@@ -106,15 +109,11 @@ export const Home: React.FC = () => {
     }
   };
 
-  const [selectedGenre, setSelectedGenre] = useState<string>('All');
-
-  const genres = ['All', 'Action', 'Adventure', 'Comedy', 'Fantasy', 'Sci-Fi', 'Romance', 'Sports', 'Drama'];
-
-  const filteredAnimeList = selectedGenre === 'All'
-    ? animeList
-    : animeList.filter((anime) =>
+  const filteredAnimeList = query && selectedGenre !== 'All'
+    ? animeList.filter((anime) =>
         (anime.genres || []).some((g) => g.toLowerCase() === selectedGenre.toLowerCase())
-      );
+      )
+    : animeList;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">

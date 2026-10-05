@@ -112,7 +112,7 @@ export interface WatchHistoryItem {
 }
 
 const WATCH_HISTORY_KEY = 'MOVUI_WATCH_HISTORY';
-const MAX_WATCH_HISTORY_ITEMS = 3;
+const MAX_WATCH_HISTORY_ITEMS = 20;
 
 export function getWatchHistory(): WatchHistoryItem[] {
   try {

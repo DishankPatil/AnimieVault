@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { fetchAnimeDetails, getSortedFranchiseMedia, getEffectiveTotalEpisodes } from '../services/anilist';
+import { fetchAnimeDetails, getSortedFranchiseMedia, getEffectiveTotalEpisodes, PLACEHOLDER_COVER } from '../services/anilist';
 import type { Anime, FranchiseItem } from '../services/anilist';
 import { PlayerContainer } from '../components/PlayerContainer';
 import { ArrowLeft, Loader2, Maximize2, Minimize2, Layers, Search, X, Film, ChevronDown } from 'lucide-react';
@@ -66,7 +66,7 @@ export const Watch: React.FC = () => {
   }, [animeId, currentEpisode]);
 
   useEffect(() => {
-    if (!animeId) return;
+    if (!animeId || isNaN(animeId)) return;
     let isMounted = true;
 
     const loadData = async () => {
@@ -104,16 +104,13 @@ export const Watch: React.FC = () => {
 
   // Range chunking calculations
   const ranges = getEpisodeRanges(totalEpisodes, CHUNK_SIZE);
-  const defaultRangeIndex = Math.max(0, Math.floor((currentEpisode - 1) / CHUNK_SIZE));
-  const [selectedRangeIndex, setSelectedRangeIndex] = useState<number>(defaultRangeIndex);
+  const computedRangeIndex = Math.max(0, Math.floor((currentEpisode - 1) / CHUNK_SIZE));
+  const [userSelectedRangeIndex, setUserSelectedRangeIndex] = useState<number | null>(null);
+  const selectedRangeIndex = userSelectedRangeIndex !== null ? userSelectedRangeIndex : computedRangeIndex;
 
-  useEffect(() => {
-    const targetIndex = Math.max(0, Math.floor((currentEpisode - 1) / CHUNK_SIZE));
-    setSelectedRangeIndex(targetIndex);
-  }, [currentEpisode, totalEpisodes]);
-
-  // Determine stream ID based on selected source provider
-  const targetStreamId = source === 'mal' && anime?.idMal ? anime.idMal : animeId;
+  // Determine effective provider and stream ID (prevent querying mal endpoint with anilist ID if idMal is null)
+  const effectiveSource = source === 'mal' && !anime?.idMal ? 'anilist' : source;
+  const targetStreamId = effectiveSource === 'mal' && anime?.idMal ? anime.idMal : animeId;
 
   const handlePrev = () => {
     if (currentEpisode > 1) {
@@ -145,6 +142,18 @@ export const Watch: React.FC = () => {
     displayedEpisodes = Array.from(
       { length: activeRange.end - activeRange.start + 1 },
       (_, i) => activeRange.start + i
+    );
+  }
+
+  if (isNaN(animeId) || animeId <= 0) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-16 text-center text-slate-400">
+        <h2 className="text-xl font-bold text-slate-200 mb-2">Invalid Anime Requested</h2>
+        <p className="text-sm mb-4">The anime ID provided in the URL is invalid.</p>
+        <Link to="/" className="inline-flex items-center gap-2 bg-teal-500 text-slate-950 font-bold px-4 py-2 rounded-lg text-xs hover:bg-teal-400 transition">
+          Return to Home
+        </Link>
+      </div>
     );
   }
 
@@ -182,7 +191,7 @@ export const Watch: React.FC = () => {
       {/* Main Video Stream Container (With Previous/Next in Upper Panel) */}
       <div className={`mb-6 transition-all duration-300 ${isTheaterMode ? 'max-w-6xl mx-auto' : ''}`}>
         <PlayerContainer
-          source={source}
+          source={effectiveSource}
           animeId={targetStreamId}
           episode={currentEpisode}
           totalEpisodes={totalEpisodes}
@@ -236,7 +245,7 @@ export const Watch: React.FC = () => {
                 <div className="relative flex items-center">
                   <select
                     value={selectedRangeIndex}
-                    onChange={(e) => setSelectedRangeIndex(Number(e.target.value))}
+                    onChange={(e) => setUserSelectedRangeIndex(Number(e.target.value))}
                     className="appearance-none bg-slate-800 text-teal-300 font-extrabold text-xs pl-3 pr-7 py-1 rounded-lg border border-slate-700 focus:outline-none focus:border-teal-500 cursor-pointer shadow"
                   >
                     {ranges.map((range, index) => (
@@ -308,7 +317,7 @@ export const Watch: React.FC = () => {
                     src={item.coverImage}
                     alt={item.title}
                     onError={(e) => {
-                      (e.target as HTMLImageElement).src = 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx176500-TaqS5WJ1v8nC.jpg';
+                      (e.target as HTMLImageElement).src = PLACEHOLDER_COVER;
                     }}
                     className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                   />

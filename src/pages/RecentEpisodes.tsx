@@ -12,18 +12,26 @@ export const RecentEpisodes: React.FC = () => {
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadInitialContent = async () => {
-    setLoading(true);
-    setError(null);
+  const fetchContent = async (isMounted = true, showLoading = false) => {
+    if (showLoading) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const result = await fetchRecentEpisodes(1, 20);
-      setEpisodes(result.episodes);
-      setPage(1);
-      setHasNextPage(result.hasNextPage);
+      if (isMounted) {
+        setEpisodes(result.episodes);
+        setPage(1);
+        setHasNextPage(result.hasNextPage);
+      }
     } catch {
-      setError('Failed to fetch recent episode releases.');
+      if (isMounted) {
+        setError('Failed to fetch recent episode releases.');
+      }
     } finally {
-      setLoading(false);
+      if (isMounted) {
+        setLoading(false);
+      }
     }
   };
 
@@ -44,10 +52,26 @@ export const RecentEpisodes: React.FC = () => {
   };
 
   useEffect(() => {
-    const init = async () => {
-      await loadInitialContent();
+    let isMounted = true;
+    fetchRecentEpisodes(1, 20)
+      .then((result) => {
+        if (isMounted) {
+          setEpisodes(result.episodes);
+          setPage(1);
+          setHasNextPage(result.hasNextPage);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setError('Failed to fetch recent episode releases.');
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
     };
-    init();
   }, []);
 
   return (
@@ -68,7 +92,7 @@ export const RecentEpisodes: React.FC = () => {
         </div>
 
         <button
-          onClick={loadInitialContent}
+          onClick={() => fetchContent(true)}
           disabled={loading}
           className="bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700 px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition disabled:opacity-50"
         >

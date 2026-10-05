@@ -13,18 +13,25 @@ export function getCachedData<T>(key: string): T | null {
 
   // 1. Check in-memory cache first (0ms latency)
   const memItem = memoryCache.get(key);
-  if (memItem && now - memItem.timestamp < CACHE_TTL_MS) {
-    return memItem.data;
+  if (memItem) {
+    if (now - memItem.timestamp < CACHE_TTL_MS) {
+      return memItem.data;
+    } else {
+      memoryCache.delete(key);
+    }
   }
 
   // 2. Check sessionStorage fallback
   try {
-    const raw = sessionStorage.getItem(`MOVUI_CACHE_${key}`);
+    const storageKey = `MOVUI_CACHE_${key}`;
+    const raw = sessionStorage.getItem(storageKey);
     if (raw) {
       const parsed: CacheEntry<T> = JSON.parse(raw);
       if (now - parsed.timestamp < CACHE_TTL_MS) {
         memoryCache.set(key, parsed);
         return parsed.data;
+      } else {
+        sessionStorage.removeItem(storageKey);
       }
     }
   } catch {

@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { fetchAnimeDetails, getSortedFranchiseMedia, getEffectiveTotalEpisodes } from '../services/anilist';
+import { fetchAnimeDetails, getSortedFranchiseMedia, getEffectiveTotalEpisodes, PLACEHOLDER_COVER } from '../services/anilist';
 import type { Anime, FranchiseItem } from '../services/anilist';
 import { Loader2, Star, Play, Calendar, Film, Heart, Layers, Search, X, ChevronDown } from 'lucide-react';
 import { isInWatchlist, toggleWatchlist } from '../utils/preferences';
@@ -49,15 +49,22 @@ export const AnimeDetails: React.FC = () => {
   const [epFilter, setEpFilter] = useState<string>('');
   const [selectedRangeIndex, setSelectedRangeIndex] = useState<number>(0);
 
+  const animeId = Number(id);
+  const isInvalidId = !id || isNaN(animeId) || animeId <= 0;
+
+  const sanitizedDescription = useMemo(() => {
+    return sanitizeDescription(anime?.description || 'No description available.');
+  }, [anime?.description]);
+
   useEffect(() => {
-    if (!id) return;
+    if (isInvalidId) return;
     let isMounted = true;
 
     const loadDetails = async () => {
       setLoading(true);
       setError(null);
       try {
-        const data = await fetchAnimeDetails(Number(id));
+        const data = await fetchAnimeDetails(animeId);
         if (isMounted && data) {
           setAnime(data);
           setBookmarked(isInWatchlist(data.id));
@@ -77,7 +84,7 @@ export const AnimeDetails: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [id]);
+  }, [isInvalidId, animeId]);
 
   const handleBookmarkToggle = () => {
     if (!anime) return;
@@ -92,6 +99,18 @@ export const AnimeDetails: React.FC = () => {
     });
     setBookmarked(added);
   };
+
+  if (isInvalidId) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-16 text-center text-slate-400">
+        <h2 className="text-xl font-bold text-slate-200 mb-2">Invalid Anime Requested</h2>
+        <p className="text-sm mb-4">The anime ID provided in the URL is invalid.</p>
+        <Link to="/" className="inline-flex items-center gap-2 bg-teal-500 text-slate-950 font-bold px-4 py-2 rounded-lg text-xs hover:bg-teal-400 transition">
+          Return to Home
+        </Link>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -156,9 +175,9 @@ export const AnimeDetails: React.FC = () => {
             <img
               src={anime.coverImage.extraLarge || anime.coverImage.large}
               alt={title}
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx176500-TaqS5WJ1v8nC.jpg';
-              }}
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = PLACEHOLDER_COVER;
+                      }}
               className="w-full aspect-[2/3] object-cover rounded-xl shadow-2xl border-2 border-slate-700"
             />
           </div>
@@ -217,7 +236,7 @@ export const AnimeDetails: React.FC = () => {
             {/* Description */}
             <div
               className="text-slate-300 text-sm leading-relaxed my-4 line-clamp-4 md:line-clamp-none"
-              dangerouslySetInnerHTML={{ __html: sanitizeDescription(anime.description || 'No description available.') }}
+              dangerouslySetInnerHTML={{ __html: sanitizedDescription }}
             />
           </div>
         </div>
@@ -254,7 +273,7 @@ export const AnimeDetails: React.FC = () => {
                       src={item.coverImage}
                       alt={item.title}
                       onError={(e) => {
-                        (e.target as HTMLImageElement).src = 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx176500-TaqS5WJ1v8nC.jpg';
+                        (e.target as HTMLImageElement).src = PLACEHOLDER_COVER;
                       }}
                       className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />

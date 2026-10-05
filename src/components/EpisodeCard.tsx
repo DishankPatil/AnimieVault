@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Play, Sparkles, Clock } from 'lucide-react';
 import type { RecentEpisode } from '../services/anilist';
+import { PLACEHOLDER_COVER } from '../services/anilist';
 
 interface EpisodeCardProps {
   episode: RecentEpisode;
@@ -38,7 +39,7 @@ export const EpisodeCard: React.FC<EpisodeCardProps> = ({ episode }) => {
           src={episode.coverImage.large || episode.coverImage.medium || episode.coverImage.extraLarge}
           alt={title}
           onError={(e) => {
-            (e.target as HTMLImageElement).src = 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21-ELSYx3yMPcKM.jpg';
+            (e.target as HTMLImageElement).src = PLACEHOLDER_COVER;
           }}
           className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
           loading="lazy"
