@@ -377,6 +377,7 @@ export const AnimeDetails: React.FC = () => {
                 <Link
                   key={ep}
                   to={`/watch/${anime.id}/${ep}`}
+                  state={{ idMal: anime.idMal, animeTitle: title }}
                   className="bg-slate-800/80 hover:bg-teal-500 hover:text-slate-950 text-slate-200 border border-slate-700 hover:border-teal-400 font-bold py-3 rounded-lg text-center transition flex flex-col items-center justify-center gap-1 group shadow-md"
                 >
                   <Play className="size-4 text-teal-400 group-hover:text-slate-950 fill-current" />

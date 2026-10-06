@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Play, Pause, FastForward, RotateCcw, RotateCw, Maximize, Minimize, Clock, ShieldCheck, ChevronLeft, ChevronRight, ServerCrash, RefreshCw, Loader2 } from 'lucide-react';
+import { Play, Pause, FastForward, RotateCcw, RotateCw, Maximize, Minimize, Clock, ShieldCheck, ChevronLeft, ChevronRight, ServerCrash, RefreshCw, Loader2, Info } from 'lucide-react';
 
 interface PlayerContainerProps {
   source?: 'mal' | 'anilist';
@@ -12,13 +12,11 @@ interface PlayerContainerProps {
   onAutoNextToggle?: (enabled: boolean) => void;
   onTrackChange: (track: 'sub' | 'dub' | 'hsub') => void;
   onColorChange: (color: string) => void;
-  onSourceChange?: (source: 'mal' | 'anilist') => void;
   onPrevEpisode?: () => void;
   onNextEpisode?: () => void;
 }
 
 export const PlayerContainer: React.FC<PlayerContainerProps> = ({
-  source = 'mal',
   animeId,
   episode,
   totalEpisodes,
@@ -28,7 +26,6 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
   onAutoNextToggle,
   onTrackChange,
   onColorChange,
-  onSourceChange,
   onPrevEpisode,
   onNextEpisode,
 }) => {
@@ -109,7 +106,7 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
       window.clearTimeout(timeoutId);
       controller.abort();
     };
-  }, [source, animeId, episode, track, retryKey]);
+  }, [animeId, episode, track, retryKey]);
 
   // Listen for player events to sync playback status
   useEffect(() => {
@@ -144,8 +141,9 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
   }, [sendCommand]);
 
   // Compute embed URL defaulting initial stream request to lowest quality (360p) for fastest load time
+  // Note: Zokoanime only supports the 'mal' route with MyAnimeList IDs.
   const cleanColor = color.replace('#', '');
-  const embedUrl = `https://zokoanime.video/stream/${source}/${animeId}/${episode}/${track}?color=${cleanColor}&quality=360p&autoplay=1&asi=1`;
+  const embedUrl = `https://zokoanime.video/stream/mal/${animeId}/${episode}/${track}?color=${cleanColor}&quality=360p&autoplay=1&asi=1`;
 
   const togglePlay = useCallback(() => {
     setIsPlaying((prev) => {
@@ -341,18 +339,32 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
               </span>
             </div>
 
-            <button
-              onClick={() => setRetryKey((prev) => prev + 1)}
-              className="bg-teal-500 hover:bg-teal-400 text-slate-950 font-extrabold px-5 py-2.5 rounded-xl text-xs flex items-center gap-2 transition shadow-lg shadow-teal-500/20 cursor-pointer"
-            >
-              <RefreshCw className="size-4" />
-              <span>Retry Connection</span>
-            </button>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {track === 'dub' && (
+                <button
+                  onClick={() => {
+                    onTrackChange('sub');
+                    setRetryKey((prev) => prev + 1);
+                  }}
+                  className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition shadow-lg shadow-amber-400/20 cursor-pointer"
+                  title="Newly released anime only have Subbed audio"
+                >
+                  <span>Switch to SUB Track (Recommended)</span>
+                </button>
+              )}
+              <button
+                onClick={() => setRetryKey((prev) => prev + 1)}
+                className="bg-teal-500 hover:bg-teal-400 text-slate-950 font-extrabold px-5 py-2.5 rounded-xl text-xs flex items-center gap-2 transition shadow-lg shadow-teal-500/20 cursor-pointer"
+              >
+                <RefreshCw className="size-4" />
+                <span>Retry Connection</span>
+              </button>
+            </div>
           </div>
         ) : (
           <iframe
             ref={iframeRef}
-            key={`${source}-${animeId}-${episode}-${track}-${retryKey}`}
+            key={`mal-${animeId}-${episode}-${track}-${retryKey}`}
             src={embedUrl}
             title={`Streaming Episode ${episode}`}
             className="w-full h-full border-0"
@@ -460,29 +472,8 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
           )}
         </div>
 
-        {/* Secondary Options: Provider, Track, Skin Color & Fullscreen */}
+        {/* Secondary Options: Track, Skin Color & Fullscreen */}
         <div className="flex flex-wrap items-center gap-3 min-w-0">
-          {onSourceChange && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-400 uppercase">Provider:</span>
-              <div className="flex bg-slate-800 p-1 rounded-lg border border-slate-700">
-                {(['mal', 'anilist'] as const).map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => onSourceChange(s)}
-                    className={`px-2.5 py-1 text-xs font-bold rounded uppercase transition cursor-pointer ${
-                      source === s
-                        ? 'bg-teal-500 text-slate-950'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-slate-400 uppercase">Track:</span>
             <div className="flex bg-slate-800 p-1 rounded-lg border border-slate-700">
@@ -523,6 +514,22 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Dub Availability Notice for Newly Added & Releasing Anime */}
+      {track === 'dub' && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 text-amber-300">
+            <Info className="size-4 shrink-0 text-amber-400" />
+            <span>Currently on <strong>DUB</strong> track. Newly released simulcasts only have <strong>SUB</strong> (Japanese audio + subtitles). If video shows 404, switch to SUB.</span>
+          </div>
+          <button
+            onClick={() => onTrackChange('sub')}
+            className="bg-teal-500 hover:bg-teal-400 text-slate-950 font-extrabold px-3 py-1.5 rounded-lg text-xs transition cursor-pointer shrink-0"
+          >
+            Switch to SUB
+          </button>
+        </div>
+      )}
     </div>
   );
 };

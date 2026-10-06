@@ -1383,23 +1383,49 @@ export async function fetchAnimeDetails(id: number): Promise<Anime | null> {
   `;
 
   try {
-    const response = await fetchWithTimeout(ANILIST_GRAPHQL_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: JSON.stringify({
-        query,
-        variables: { id }
-      })
-    }, 3500);
+    let response: Response;
+    try {
+      response = await fetchWithTimeout(ANILIST_GRAPHQL_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          query,
+          variables: { id }
+        })
+      }, 7500);
+    } catch {
+      // Retry once if first attempt timed out or failed
+      response = await fetchWithTimeout(ANILIST_GRAPHQL_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          query,
+          variables: { id }
+        })
+      }, 7500);
+    }
+
     const json = await response.json();
     if (json.data?.Media) {
       const media = json.data.Media;
       const parsedRelations = parseRawRelations(media);
+      let resolvedIdMal = media.idMal;
+      if (!resolvedIdMal && parsedRelations.length > 0) {
+        const relWithMal = parsedRelations.find(r => r.idMal);
+        if (relWithMal) {
+          resolvedIdMal = relWithMal.idMal;
+        }
+      }
+
       const result: Anime = {
         ...media,
+        idMal: resolvedIdMal || null,
         relations: parsedRelations,
       };
       setCachedData(cacheKey, result);
@@ -1447,6 +1473,7 @@ export async function fetchAnimeDetails(id: number): Promise<Anime | null> {
         coverLarge = histItem.coverImage;
         coverMedium = histItem.coverImage;
         if (histItem.totalEpisodes) episodes = histItem.totalEpisodes;
+        if (histItem.idMal) idMal = histItem.idMal;
       } else {
         const watchlist = getWatchlist();
         const watchItem = watchlist.find(w => w.id === id);

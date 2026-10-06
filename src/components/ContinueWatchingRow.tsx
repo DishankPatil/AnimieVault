@@ -35,6 +35,7 @@ export const ContinueWatchingRow: React.FC = () => {
           <Link
             key={item.animeId}
             to={`/watch/${item.animeId}/${item.episode}`}
+            state={{ idMal: item.idMal, animeTitle: item.title }}
             className="group relative bg-slate-900/90 border border-slate-800 hover:border-teal-500/50 rounded-xl overflow-hidden transition-all duration-300 flex flex-col hover:-translate-y-1 hover:shadow-xl hover:shadow-teal-500/10"
           >
             <div className="relative aspect-[16/9] w-full bg-slate-950 overflow-hidden">

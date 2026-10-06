@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { fetchAnimeDetails, getSortedFranchiseMedia, getEffectiveTotalEpisodes, PLACEHOLDER_COVER } from '../services/anilist';
 import type { Anime, FranchiseItem } from '../services/anilist';
+import { getCachedData } from '../utils/apiCache';
 import { PlayerContainer } from '../components/PlayerContainer';
-import { ArrowLeft, Loader2, Maximize2, Minimize2, Layers, Search, X, Film, ChevronDown } from 'lucide-react';
-import { getPlayerPreferences, savePlayerPreferences, saveWatchHistory } from '../utils/preferences';
+import { ArrowLeft, Loader2, Maximize2, Minimize2, Search, Film, Info, X, ChevronDown, Layers } from 'lucide-react';
+import { getPlayerPreferences, savePlayerPreferences, saveWatchHistory, getWatchHistory } from '../utils/preferences';
 
 const RELATION_LABELS: Record<string, string> = {
   PREQUEL: 'Prequel',
@@ -30,14 +31,27 @@ function getEpisodeRanges(totalEpisodes: number, chunkSize = CHUNK_SIZE) {
 export const Watch: React.FC = () => {
   const { id, episode } = useParams<{ id: string; episode: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const locationState = location.state as { idMal?: number | null; animeTitle?: string } | null;
 
   const animeId = Number(id);
   const currentEpisode = Number(episode) || 1;
 
   const initialPrefs = getPlayerPreferences();
-  const [anime, setAnime] = useState<Anime | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [source, setSource] = useState<'mal' | 'anilist'>(initialPrefs.source);
+  const [anime, setAnime] = useState<Anime | null>(() => {
+    return getCachedData<Anime>(`details_${animeId}`);
+  });
+  const [idMal, setIdMal] = useState<number | null>(() => {
+    if (locationState?.idMal) return locationState.idMal;
+    const cached = getCachedData<Anime>(`details_${animeId}`);
+    if (cached?.idMal) return cached.idMal;
+    const hist = getWatchHistory().find(h => h.animeId === animeId);
+    if (hist?.idMal) return hist.idMal;
+    return null;
+  });
+  const [loading, setLoading] = useState<boolean>(() => {
+    return !getCachedData<Anime>(`details_${animeId}`);
+  });
   const [track, setTrack] = useState<'sub' | 'dub' | 'hsub'>(initialPrefs.track);
   const [color, setColor] = useState<string>(initialPrefs.color);
   const [epSearch, setEpSearch] = useState<string>('');
@@ -55,11 +69,6 @@ export const Watch: React.FC = () => {
     savePlayerPreferences({ color: newColor });
   };
 
-  const handleSourceChange = (newSource: 'mal' | 'anilist') => {
-    setSource(newSource);
-    savePlayerPreferences({ source: newSource });
-  };
-
   // Scroll to top immediately when landing on Watch page or switching episodes
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
@@ -75,11 +84,15 @@ export const Watch: React.FC = () => {
         const data = await fetchAnimeDetails(animeId);
         if (isMounted && data) {
           setAnime(data);
+          if (data.idMal) {
+            setIdMal(data.idMal);
+          }
           // Save to Watch History
           const animeTitle = data.title.english || data.title.romaji;
           const cover = data.coverImage.extraLarge || data.coverImage.large;
           saveWatchHistory({
             animeId: data.id,
+            idMal: data.idMal,
             title: animeTitle,
             coverImage: cover,
             episode: currentEpisode,
@@ -108,9 +121,13 @@ export const Watch: React.FC = () => {
   const [userSelectedRangeIndex, setUserSelectedRangeIndex] = useState<number | null>(null);
   const selectedRangeIndex = userSelectedRangeIndex !== null ? userSelectedRangeIndex : computedRangeIndex;
 
-  // Determine effective provider and stream ID (prevent querying mal endpoint with anilist ID if idMal is null)
-  const effectiveSource = source === 'mal' && !anime?.idMal ? 'anilist' : source;
-  const targetStreamId = effectiveSource === 'mal' && anime?.idMal ? anime.idMal : animeId;
+  // Newly releasing simulcasts only have Japanese audio with English subtitles (SUB).
+  // Automatic smart fallback ensures users with 'dub' preferences don't get stuck on 404 cards.
+  const isNewlyReleasing = anime?.status === 'RELEASING';
+  const effectiveTrack: 'sub' | 'dub' | 'hsub' = isNewlyReleasing && track === 'dub' ? 'sub' : track;
+
+  // Stream ID target: MUST be MyAnimeList ID (idMal) for Zokoanime stream engine
+  const targetStreamId = idMal || anime?.idMal || null;
 
   const handlePrev = () => {
     if (currentEpisode > 1) {
@@ -124,7 +141,7 @@ export const Watch: React.FC = () => {
     }
   };
 
-  const title = anime ? anime.title.english || anime.title.romaji : `Anime #${animeId}`;
+  const title = anime ? anime.title.english || anime.title.romaji : (locationState?.animeTitle || `Anime #${animeId}`);
 
   const [autoNext, setAutoNext] = useState<boolean>(true);
 
@@ -190,21 +207,54 @@ export const Watch: React.FC = () => {
 
       {/* Main Video Stream Container (With Previous/Next in Upper Panel) */}
       <div className={`mb-6 transition-all duration-300 ${isTheaterMode ? 'max-w-6xl mx-auto' : ''}`}>
-        <PlayerContainer
-          source={effectiveSource}
-          animeId={targetStreamId}
-          episode={currentEpisode}
-          totalEpisodes={totalEpisodes}
-          track={track}
-          color={color}
-          autoNext={autoNext}
-          onAutoNextToggle={handleAutoNextToggle}
-          onTrackChange={handleTrackChange}
-          onColorChange={handleColorChange}
-          onSourceChange={handleSourceChange}
-          onPrevEpisode={handlePrev}
-          onNextEpisode={handleNext}
-        />
+        {/* Dub Auto-Fallback Advisory Banner */}
+        {isNewlyReleasing && track === 'dub' && (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 mb-3 flex items-center justify-between text-xs text-amber-300 shadow">
+            <div className="flex items-center gap-2">
+              <Info className="size-4 text-amber-400 shrink-0" />
+              <span>
+                Newly released simulcast: English Dub is not yet released for this episode. Automatically streaming in <strong>SUB</strong> (Subtitled).
+              </span>
+            </div>
+          </div>
+        )}
+
+        {loading && !targetStreamId ? (
+          <div className="relative w-full aspect-video max-h-[66vh] bg-slate-950 rounded-xl overflow-hidden shadow-2xl border border-slate-800 flex flex-col items-center justify-center p-6 text-center">
+            <Loader2 className="size-10 text-teal-400 animate-spin mb-4" />
+            <h3 className="text-lg font-bold text-slate-100 mb-1">Connecting to Stream Engine</h3>
+            <p className="text-xs text-slate-400 max-w-sm">Resolving stream channels and audio tracks for {title}...</p>
+          </div>
+        ) : !targetStreamId ? (
+          <div className="relative w-full aspect-video max-h-[66vh] bg-slate-950 rounded-xl overflow-hidden shadow-2xl border border-slate-800 flex flex-col items-center justify-center p-6 text-center">
+            <Film className="size-12 text-slate-600 mb-3" />
+            <h3 className="text-lg font-bold text-slate-200 mb-1">Stream Pending Indexing</h3>
+            <p className="text-xs text-slate-400 max-w-md mb-4 leading-relaxed">
+              This newly added anime is currently pending cross-indexing on stream servers. Please check back shortly or explore other recent episodes.
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="bg-teal-500 hover:bg-teal-400 text-slate-950 font-extrabold px-4 py-2 rounded-lg text-xs transition cursor-pointer shadow-lg shadow-teal-500/20"
+            >
+              Refresh Stream
+            </button>
+          </div>
+        ) : (
+          <PlayerContainer
+            source="mal"
+            animeId={targetStreamId}
+            episode={currentEpisode}
+            totalEpisodes={totalEpisodes}
+            track={effectiveTrack}
+            color={color}
+            autoNext={autoNext}
+            onAutoNextToggle={handleAutoNextToggle}
+            onTrackChange={handleTrackChange}
+            onColorChange={handleColorChange}
+            onPrevEpisode={handlePrev}
+            onNextEpisode={handleNext}
+          />
+        )}
       </div>
 
       {/* PRIORITY #1: Quick Episode Grid with Search & Range Dropdown */}

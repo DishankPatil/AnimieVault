@@ -32,6 +32,7 @@ export const EpisodeCard: React.FC<EpisodeCardProps> = ({ episode }) => {
   return (
     <Link
       to={`/watch/${episode.animeId}/${episode.episode}`}
+      state={{ idMal: episode.idMal, animeTitle: title }}
       className="group relative bg-slate-900/60 rounded-xl overflow-hidden border border-slate-800 hover:border-teal-500/50 transition duration-300 flex flex-col hover:-translate-y-1 hover:shadow-xl hover:shadow-teal-500/10"
     >
       <div className="relative aspect-[2/3] w-full overflow-hidden bg-slate-950">

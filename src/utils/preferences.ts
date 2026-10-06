@@ -4,7 +4,7 @@ export interface PlayerPreferences {
   server: 'zoko';
   track: 'sub' | 'dub' | 'hsub';
   color: string;
-  source: 'mal' | 'anilist';
+  source: 'mal';
   quality: VideoQuality;
 }
 
@@ -27,7 +27,7 @@ export function getPlayerPreferences(): PlayerPreferences {
         server: 'zoko',
         track: ['sub', 'dub', 'hsub'].includes(parsed.track) ? parsed.track : DEFAULT_PREFS.track,
         color: typeof parsed.color === 'string' && parsed.color.startsWith('#') ? parsed.color : DEFAULT_PREFS.color,
-        source: ['mal', 'anilist'].includes(parsed.source) ? parsed.source : DEFAULT_PREFS.source,
+        source: 'mal', // Always force 'mal' because Zokoanime only supports 'mal'
         quality: ['auto', '1080p', '720p', '480p', '360p'].includes(parsed.quality) ? parsed.quality : DEFAULT_PREFS.quality,
       };
     }
@@ -40,7 +40,7 @@ export function getPlayerPreferences(): PlayerPreferences {
 export function savePlayerPreferences(prefs: Partial<PlayerPreferences>): void {
   try {
     const current = getPlayerPreferences();
-    const updated = { ...current, ...prefs };
+    const updated = { ...current, ...prefs, source: 'mal' as const };
     localStorage.setItem(PREFS_KEY, JSON.stringify(updated));
   } catch {
     // Ignore storage errors
@@ -104,6 +104,7 @@ export function toggleWatchlist(item: Omit<WatchlistItem, 'addedAt'>): boolean {
 /* ================= WATCH HISTORY SYSTEM ================= */
 export interface WatchHistoryItem {
   animeId: number;
+  idMal?: number | null;
   title: string;
   coverImage: string;
   episode: number;
