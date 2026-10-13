@@ -126,8 +126,8 @@ export const Watch: React.FC = () => {
   const isNewlyReleasing = anime?.status === 'RELEASING';
   const effectiveTrack: 'sub' | 'dub' | 'hsub' = isNewlyReleasing && track === 'dub' ? 'sub' : track;
 
-  // Stream ID target: MUST be MyAnimeList ID (idMal) for Zokoanime stream engine
-  const targetStreamId = idMal || anime?.idMal || null;
+  // Stream ID target: MyAnimeList ID (idMal) if available, otherwise AniList ID
+  const targetMalId = idMal || anime?.idMal || null;
 
   const handlePrev = () => {
     if (currentEpisode > 1) {
@@ -219,30 +219,53 @@ export const Watch: React.FC = () => {
           </div>
         )}
 
-        {loading && !targetStreamId ? (
+        {loading && !targetMalId && !anime ? (
           <div className="relative w-full aspect-video max-h-[66vh] bg-slate-950 rounded-xl overflow-hidden shadow-2xl border border-slate-800 flex flex-col items-center justify-center p-6 text-center">
             <Loader2 className="size-10 text-teal-400 animate-spin mb-4" />
             <h3 className="text-lg font-bold text-slate-100 mb-1">Connecting to Stream Engine</h3>
             <p className="text-xs text-slate-400 max-w-sm">Resolving stream channels and audio tracks for {title}...</p>
           </div>
-        ) : !targetStreamId ? (
+        ) : anime?.status === 'NOT_YET_RELEASED' ? (
           <div className="relative w-full aspect-video max-h-[66vh] bg-slate-950 rounded-xl overflow-hidden shadow-2xl border border-slate-800 flex flex-col items-center justify-center p-6 text-center">
-            <Film className="size-12 text-slate-600 mb-3" />
-            <h3 className="text-lg font-bold text-slate-200 mb-1">Stream Pending Indexing</h3>
+            <Film className="size-12 text-teal-400 mb-3" />
+            <h3 className="text-lg font-bold text-slate-200 mb-1">Anime Has Not Aired Yet</h3>
             <p className="text-xs text-slate-400 max-w-md mb-4 leading-relaxed">
-              This newly added anime is currently pending cross-indexing on stream servers. Please check back shortly or explore other recent episodes.
+              This newly added title is scheduled for an upcoming release season. Episodes will become streamable once the premiere broadcasts.
             </p>
-            <button
-              onClick={() => window.location.reload()}
+            <Link
+              to={`/anime/${animeId}`}
               className="bg-teal-500 hover:bg-teal-400 text-slate-950 font-extrabold px-4 py-2 rounded-lg text-xs transition cursor-pointer shadow-lg shadow-teal-500/20"
             >
-              Refresh Stream
-            </button>
+              View Anime Details
+            </Link>
+          </div>
+        ) : !targetMalId ? (
+          <div className="relative w-full aspect-video max-h-[66vh] bg-slate-950 rounded-xl overflow-hidden shadow-2xl border border-slate-800 flex flex-col items-center justify-center p-6 text-center">
+            <Film className="size-12 text-teal-400/60 mb-3" />
+            <h3 className="text-lg font-bold text-slate-200 mb-1">Stream Pending Indexing</h3>
+            <p className="text-xs text-slate-400 max-w-md mb-4 leading-relaxed">
+              This newly added title has not been linked with a MyAnimeList ID on AniList yet. The stream engine requires this database cross-reference to locate video sources.
+            </p>
+            <div className="flex items-center gap-3">
+              <Link
+                to={`/anime/${animeId}`}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold px-4 py-2 rounded-lg text-xs border border-slate-700 transition"
+              >
+                View Anime Details
+              </Link>
+              <button
+                onClick={() => window.location.reload()}
+                className="bg-teal-500 hover:bg-teal-400 text-slate-950 font-extrabold px-4 py-2 rounded-lg text-xs transition cursor-pointer shadow-lg shadow-teal-500/20"
+              >
+                Refresh Stream
+              </button>
+            </div>
           </div>
         ) : (
           <PlayerContainer
             source="mal"
-            animeId={targetStreamId}
+            animeId={targetMalId}
+            malId={targetMalId}
             episode={currentEpisode}
             totalEpisodes={totalEpisodes}
             track={effectiveTrack}
@@ -253,6 +276,7 @@ export const Watch: React.FC = () => {
             onColorChange={handleColorChange}
             onPrevEpisode={handlePrev}
             onNextEpisode={handleNext}
+            isNewlyReleasing={isNewlyReleasing}
           />
         )}
       </div>

@@ -1,9 +1,10 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Play, Pause, FastForward, RotateCcw, RotateCw, Maximize, Minimize, Clock, ShieldCheck, ChevronLeft, ChevronRight, ServerCrash, RefreshCw, Loader2, Info } from 'lucide-react';
+import { Play, Pause, FastForward, RotateCcw, RotateCw, Maximize, Minimize, Clock, ShieldCheck, ChevronLeft, ChevronRight, ServerCrash, RefreshCw, Info, Radio } from 'lucide-react';
 
 interface PlayerContainerProps {
   source?: 'mal' | 'anilist';
   animeId: number;
+  malId?: number | null;
   episode: number;
   totalEpisodes?: number;
   track: 'sub' | 'dub' | 'hsub';
@@ -14,10 +15,13 @@ interface PlayerContainerProps {
   onColorChange: (color: string) => void;
   onPrevEpisode?: () => void;
   onNextEpisode?: () => void;
+  isNewlyReleasing?: boolean;
 }
 
 export const PlayerContainer: React.FC<PlayerContainerProps> = ({
+  source = 'mal',
   animeId,
+  malId,
   episode,
   totalEpisodes,
   track,
@@ -28,6 +32,7 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
   onColorChange,
   onPrevEpisode,
   onNextEpisode,
+  isNewlyReleasing = false,
 }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -35,7 +40,11 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [jumpTimeInput, setJumpTimeInput] = useState<string>('');
+
+  // Resolve whether MAL ID is available
+  const effectiveMalId = malId ?? (source === 'mal' ? animeId : null);
   const supportsRemoteControls = true;
+
   const currentTimeRef = useRef<number>(0);
   const pendingSeekRef = useRef<number | null>(null);
 
@@ -61,7 +70,6 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
 
   // Server health state
   const [isServerDown, setIsServerDown] = useState<boolean>(false);
-  const [isCheckingServer, setIsCheckingServer] = useState<boolean>(false);
   const [retryKey, setRetryKey] = useState<number>(0);
 
   // Invisible 1-time click absorber state to disarm initial clickjacking overlays without obscuring video quality
@@ -77,37 +85,6 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
     }
   }, []);
 
-  // Ping server health whenever source/animeId/episode/track/retryKey changes
-  useEffect(() => {
-    let isMounted = true;
-
-    const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => {
-      controller.abort();
-    }, 5000);
-
-    fetch('https://zokoanime.video', { mode: 'no-cors', signal: controller.signal })
-      .then(() => {
-        window.clearTimeout(timeoutId);
-        if (isMounted) {
-          setIsCheckingServer(false);
-        }
-      })
-      .catch(() => {
-        window.clearTimeout(timeoutId);
-        if (isMounted) {
-          setIsCheckingServer(false);
-          // Don't force server down solely on background ping failure (adblockers block no-cors fetches)
-        }
-      });
-
-    return () => {
-      isMounted = false;
-      window.clearTimeout(timeoutId);
-      controller.abort();
-    };
-  }, [animeId, episode, track, retryKey]);
-
   // Listen for player events to sync playback status
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -115,7 +92,6 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
       
       // If we receive any message from zokoanime, server is online
       setIsServerDown(false);
-      setIsCheckingServer(false);
 
       const msg = event.data;
       if (!msg || msg.channel !== 'zokoanime') return;
@@ -141,9 +117,9 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
   }, [sendCommand]);
 
   // Compute embed URL defaulting initial stream request to lowest quality (360p) for fastest load time
-  // Note: Zokoanime only supports the 'mal' route with MyAnimeList IDs.
   const cleanColor = color.replace('#', '');
-  const embedUrl = `https://zokoanime.video/stream/mal/${animeId}/${episode}/${track}?color=${cleanColor}&quality=360p&autoplay=1&asi=1`;
+  const zokoId = effectiveMalId || animeId;
+  const embedUrl = `https://zokoanime.video/stream/mal/${zokoId}/${episode}/${track}?color=${cleanColor}&quality=360p&autoplay=1&asi=1`;
 
   const togglePlay = useCallback(() => {
     setIsPlaying((prev) => {
@@ -170,7 +146,7 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
         sendCommand({ type: 'seek', time: targetTime });
       }
     }, 250);
-  }, [sendCommand]);
+  }, [sendCommand, supportsRemoteControls]);
 
   // Keyboard shortcuts:
   // - Press 'P' or 'p' to Pause/Play video
@@ -247,10 +223,14 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
       {/* Stream Header (Upper Area Panel) */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="font-semibold text-slate-400 uppercase tracking-wider">Stream Server:</span>
-          <span className="bg-slate-800 text-teal-400 border border-slate-700 font-extrabold px-3 py-1 rounded-md">
-            Zokoanime Engine
+          <span className="font-semibold text-slate-400 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+            <Radio className="size-3.5 text-teal-400 animate-pulse" /> Engine:
           </span>
+          <span className="bg-slate-800 text-teal-400 border border-slate-700 font-extrabold px-3 py-1 rounded-md flex items-center gap-1.5 shadow-sm">
+            <span className="w-1.5 h-1.5 rounded-full bg-teal-400"></span>
+            <span>Zoko Stream Engine</span>
+          </span>
+          <span className="text-[11px] text-slate-500 font-medium hidden sm:inline">• Multi-Mirror Stream</span>
         </div>
 
         {/* Upper Area Panel Controls: Episode Navigation */}
@@ -286,24 +266,17 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
           <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold shrink-0 border ${
             isServerDown
               ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
-              : isCheckingServer
-              ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
               : 'bg-teal-500/10 border-teal-500/30 text-teal-400'
           }`}>
             {isServerDown ? (
               <>
                 <ServerCrash className="size-4 text-rose-400 animate-pulse" />
-                <span>Server Down / Offline</span>
-              </>
-            ) : isCheckingServer ? (
-              <>
-                <Loader2 className="size-4 text-amber-400 animate-spin" />
-                <span>Checking Server Connection...</span>
+                <span>Stream Sync Pending / Offline</span>
               </>
             ) : (
               <>
                 <ShieldCheck className="size-4 text-teal-400" />
-                <span>Remote Engine Active • Native Controls Enabled</span>
+                <span>Active • Remote Controls Enabled</span>
               </>
             )}
           </div>
@@ -321,29 +294,32 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
               <ServerCrash className="size-12 text-rose-500" />
             </div>
             <h3 className="text-lg sm:text-xl font-black text-slate-100 mb-2">
-              Anime Stream Server Error
+              {isNewlyReleasing ? 'Simulcast Video Upload Pending' : 'Stream Connection Notice'}
             </h3>
-            <p className="text-xs sm:text-sm text-slate-400 max-w-md mb-5 leading-relaxed">
-              The stream server (<span className="text-slate-200 font-mono font-semibold">zokoanime.video</span>) is currently unreachable or taking too long to respond.
+            <p className="text-xs sm:text-sm text-slate-400 max-w-md mb-4 leading-relaxed">
+              {isNewlyReleasing
+                ? 'Newly released episodes take approximately 30–90 minutes after Japanese television broadcast to be encoded and mirrored across web CDNs. If this episode just finished airing, please check back shortly.'
+                : 'The stream could not be loaded. This can occur if an adblocker blocked an essential player component, or if the episode is currently syncing.'}
             </p>
 
-            <div className="bg-slate-900 border border-slate-800 p-3.5 rounded-xl text-left text-xs text-slate-400 max-w-md w-full mb-6 flex flex-col gap-2 shadow-inner">
-              <span className="font-bold text-slate-300">Server Diagnostic:</span>
+            <div className="bg-slate-900 border border-slate-800 p-3.5 rounded-xl text-left text-xs text-slate-400 max-w-md w-full mb-5 flex flex-col gap-2 shadow-inner">
+              <span className="font-bold text-slate-300">Diagnostics:</span>
               <span className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"></span>
-                <span>Status: <strong className="text-rose-400 font-semibold">Server Down / Connection Timeout</strong></span>
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"></span>
+                <span>Track: <strong className="text-slate-200">{track.toUpperCase()}</strong> {track === 'dub' ? '(Newly aired simulcasts only have SUB audio)' : ''}</span>
               </span>
               <span className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-slate-500 shrink-0"></span>
-                <span>Details: Unable to connect to host domain.</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-teal-400 shrink-0"></span>
+                <span>Status: <strong className="text-teal-400 font-semibold">{isNewlyReleasing ? 'Airing window in progress' : 'Ready to retry'}</strong></span>
               </span>
             </div>
 
-            <div className="flex flex-wrap items-center justify-center gap-2">
+            <div className="flex flex-wrap items-center justify-center gap-2 max-w-md">
               {track === 'dub' && (
                 <button
                   onClick={() => {
                     onTrackChange('sub');
+                    setIsServerDown(false);
                     setRetryKey((prev) => prev + 1);
                   }}
                   className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition shadow-lg shadow-amber-400/20 cursor-pointer"
@@ -352,27 +328,30 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
                   <span>Switch to SUB Track (Recommended)</span>
                 </button>
               )}
+
               <button
-                onClick={() => setRetryKey((prev) => prev + 1)}
-                className="bg-teal-500 hover:bg-teal-400 text-slate-950 font-extrabold px-5 py-2.5 rounded-xl text-xs flex items-center gap-2 transition shadow-lg shadow-teal-500/20 cursor-pointer"
+                onClick={() => {
+                  setIsServerDown(false);
+                  setRetryKey((prev) => prev + 1);
+                }}
+                className="bg-teal-500 hover:bg-teal-400 text-slate-950 font-extrabold px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 transition shadow-lg shadow-teal-500/20 cursor-pointer"
               >
-                <RefreshCw className="size-4" />
-                <span>Retry Connection</span>
+                <RefreshCw className="size-3.5" />
+                <span>Retry Stream</span>
               </button>
             </div>
           </div>
         ) : (
           <iframe
             ref={iframeRef}
-            key={`mal-${animeId}-${episode}-${track}-${retryKey}`}
+            key={`zoko-${animeId}-${episode}-${track}-${retryKey}`}
             src={embedUrl}
             title={`Streaming Episode ${episode}`}
             className="w-full h-full border-0"
-            allow="autoplay; fullscreen"
+            allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
             allowFullScreen
             onError={() => {
               setIsServerDown(true);
-              setIsCheckingServer(false);
             }}
           />
         )}
@@ -528,6 +507,18 @@ export const PlayerContainer: React.FC<PlayerContainerProps> = ({
           >
             Switch to SUB
           </button>
+        </div>
+      )}
+
+      {/* Newly Released / Simulcast Airing Window Notice */}
+      {isNewlyReleasing && (
+        <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 text-slate-300">
+            <Info className="size-4 shrink-0 text-teal-400" />
+            <span>
+              <strong>Simulcast Notice:</strong> For episodes broadcast in the last 1–2 hours, video rippers and web encoders take approximately 30–90 minutes post-broadcast to process and upload video files. If the stream shows an error or buffers, please allow some time for encoding to complete.
+            </span>
+          </div>
         </div>
       )}
     </div>

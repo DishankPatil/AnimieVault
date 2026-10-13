@@ -1,7 +1,20 @@
 export type VideoQuality = 'auto' | '1080p' | '720p' | '480p' | '360p';
+export type StreamServer = 'zoko';
+
+export interface ServerConfig {
+  id: StreamServer;
+  name: string;
+  shortName: string;
+  desc: string;
+  requiresMal: boolean;
+}
+
+export const STREAM_SERVERS: ServerConfig[] = [
+  { id: 'zoko', name: 'Zokoanime Engine', shortName: 'Zoko', desc: 'Fastest load • Multi-mirror aggregation • Custom remote', requiresMal: true },
+];
 
 export interface PlayerPreferences {
-  server: 'zoko';
+  server: StreamServer;
   track: 'sub' | 'dub' | 'hsub';
   color: string;
   source: 'mal';
@@ -24,7 +37,7 @@ export function getPlayerPreferences(): PlayerPreferences {
     if (saved) {
       const parsed = JSON.parse(saved);
       return {
-        server: 'zoko',
+        server: parsed.server === 'zoko' ? 'zoko' : DEFAULT_PREFS.server,
         track: ['sub', 'dub', 'hsub'].includes(parsed.track) ? parsed.track : DEFAULT_PREFS.track,
         color: typeof parsed.color === 'string' && parsed.color.startsWith('#') ? parsed.color : DEFAULT_PREFS.color,
         source: 'mal', // Always force 'mal' because Zokoanime only supports 'mal'
